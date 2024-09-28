@@ -1,9 +1,13 @@
 package rbtree
 
-type EntryItem interface {
-	New() EntryItem
-	Copy() EntryItem
+type Key interface {
+	New() Key
+	Copy() Key
 	Size() int
-	IsNil() bool
-	Compare(k2 EntryItem) int
+	Compare(k2 Key) int
+}
+
+func KeySize[K Key]() int {
+	var k K
+	return k.Size()
 }

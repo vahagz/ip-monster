@@ -5,16 +5,16 @@ import (
 	"unsafe"
 )
 
-func newNode[I array.Integer, K EntryItem](key K) *node[I, K] {
+func newNode[I array.Integer, K Key](key K) *node[I, K] {
 	return &node[I, K]{
 		flags: FV_COLOR_RED,
 		key:   key.Copy().(K),
 	}
 }
 
-func emptyNode[I array.Integer, K EntryItem]() node[I, K] {
+func emptyNode[I array.Integer, K Key]() *node[I, K] {
 	var k K
-	return node[I, K]{
+	return &node[I, K]{
 		key: k.New().(K),
 	}
 }
@@ -32,7 +32,7 @@ const (
 	FT_COLOR flagType = 0
 )
 
-type node[I array.Integer, K EntryItem] struct {
+type node[I array.Integer, K Key] struct {
 	left   I
 	right  I
 	parent I
@@ -40,7 +40,7 @@ type node[I array.Integer, K EntryItem] struct {
 	key    K
 }
 
-func NodeSize[I array.Integer, K EntryItem]() int {
+func NodeSize[I array.Integer, K Key]() int {
 	var n node[I, K]
 	return n.size()
 }
@@ -75,14 +75,14 @@ func (n *node[I, K]) getFlag(ft flagType) flagVaue {
 	return n.flags & flagVaue(byte(1)<<byte(ft))
 }
 
-func (n node[I, K]) MarshalBinary() ([]byte, error) {
-	sz := n.size()
-	buf := make([]byte, sz)
-	copy(buf, unsafe.Slice((*byte)(unsafe.Pointer(&n)), sz))
-	return buf, nil
-}
+// func (n node[I, K]) MarshalBinary() ([]byte, error) {
+// 	sz := n.size()
+// 	buf := make([]byte, sz)
+// 	copy(buf, unsafe.Slice((*byte)(unsafe.Pointer(&n)), sz))
+// 	return buf, nil
+// }
 
-func (n *node[I, K]) UnmarshalBinary(d []byte) error {
-	*n = *(*node[I, K])(unsafe.Pointer(&d[0]))
-	return nil
-}
+// func (n *node[I, K]) UnmarshalBinary(d []byte) error {
+// 	*n = *(*node[I, K])(unsafe.Pointer(&d[0]))
+// 	return nil
+// }

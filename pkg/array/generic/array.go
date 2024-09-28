@@ -1,28 +1,24 @@
 package array
 
 import (
-	"encoding"
 	"unsafe"
 
 	"ip_addr_counter/pkg/array"
 	"ip_addr_counter/pkg/file"
 )
 
-type Elem interface {
-	encoding.BinaryMarshaler
-}
+type Elem interface {  }
 
 type ElemPointer[T any] interface {
 	Elem
-	encoding.BinaryUnmarshaler
 	*T
 }
 
 type Array[I array.Integer, T Elem, PT ElemPointer[T]] interface {
 	Get(index I) PT
 	Last() PT
-	Set(index I, val T)
-	Push(val T) I
+	Set(index I, val PT)
+	Push(val PT) I
 	Popn()
 	Pop() PT
 	Swap(i, j I)
@@ -33,6 +29,7 @@ type Array[I array.Integer, T Elem, PT ElemPointer[T]] interface {
 
 type arrayGeneric[I array.Integer, T Elem, PT ElemPointer[T]] struct {
 	arr array.Array[I]
+	// _items []T // for debugging
 }
 
 func New[I array.Integer, T Elem, PT ElemPointer[T]](
@@ -42,6 +39,7 @@ func New[I array.Integer, T Elem, PT ElemPointer[T]](
 ) Array[I, T, PT] {
 	return &arrayGeneric[I, T, PT]{
 		arr: array.New[I](file, elemSize, length),
+		// _items: unsafe.Slice((PT)(unsafe.Pointer(&file.Slice(0, 1)[0])), file.Size() / uint64(elemSize)),  // for debugging
 	}
 }
 
@@ -53,11 +51,11 @@ func (a *arrayGeneric[I, T, PT]) Last() PT {
 	return a.Get(a.Len() - 1)
 }
 
-func (a *arrayGeneric[I, T, PT]) Set(index I, val T) {
-	*a.Get(index) = val
+func (a *arrayGeneric[I, T, PT]) Set(index I, val PT) {
+	*a.Get(index) = *val
 }
 
-func (a *arrayGeneric[I, T, PT]) Push(val T) I {
+func (a *arrayGeneric[I, T, PT]) Push(val PT) I {
 	a.arr.Grow(a.arr.Len() + 1)
 	a.Set(a.arr.Len() - 1, val)
 	return a.arr.Len() - 1

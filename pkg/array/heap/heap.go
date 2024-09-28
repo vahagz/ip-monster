@@ -3,13 +3,14 @@ package array
 import (
 	"bytes"
 	"container/heap"
+	"ip_addr_counter/pkg/array"
 )
 
-type heapArray[T Integer] struct {
-	arr Array[T]
+type heapArray[T array.Integer] struct {
+	arr array.Array[T]
 }
 
-func Heap[T Integer](arr Array[T]) heap.Interface {
+func Heap[T array.Integer](arr array.Array[T]) heap.Interface {
 	return &heapArray[T]{arr}
 }
 

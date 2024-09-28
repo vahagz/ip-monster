@@ -1,10 +1,72 @@
 package rbtree
 
-func (tree *RBTree[I, K]) insert(zNode *node[I, K]) (bool, error) {
-	y := tree.meta.null
-	temp := tree.meta.root
+import (
+	"encoding/binary"
 
-	for temp != tree.meta.null {
+	a "ip_addr_counter/pkg/array"
+	array "ip_addr_counter/pkg/array/generic"
+	"ip_addr_counter/pkg/file"
+)
+
+var bin = binary.BigEndian
+
+func NewWriter[I a.Integer, K Key](file file.Interface, meta *Metadata[I]) *RBTreeWriter[I, K] {
+	arr := array.New[I, node[I, K]](file, NodeSize[I, K](), 0)
+	nullNode := emptyNode[I, K]()
+	nullNode.setBlack()
+	nullPtr := arr.Push(nullNode)
+
+	if meta == nil {
+		meta = &Metadata[I]{
+			NodeKeySize: uint16(KeySize[Key]()),
+			Root:        nullPtr,
+			Null:        nullPtr,
+			Count:       0,
+		}
+	}
+	tree := &RBTreeWriter[I, K]{
+		arr:  arr,
+		meta: meta,
+	}
+
+	return tree
+}
+
+type RBTreeWriter[I a.Integer, K Key] struct {
+	arr  array.Array[I, node[I, K], *node[I, K]]
+	meta *Metadata[I]
+}
+
+func (tree *RBTreeWriter[I, K]) Meta() *Metadata[I] {
+	return tree.meta
+}
+
+func (tree *RBTreeWriter[I, K]) NodeSize() int {
+	var n *node[I, K]
+	return n.size()
+}
+
+func (tree *RBTreeWriter[I, K]) Put(key K) bool {
+	node := newNode[I](key)
+	node.left = tree.meta.Null
+	node.right = tree.meta.Null
+	node.setRed()
+	inserted, err := tree.insert(node)
+	if err != nil {
+		panic(err)
+	}
+	return inserted
+}
+
+func (tree *RBTreeWriter[I, K]) Count() int {
+	return int(tree.meta.Count)
+}
+
+func (tree *RBTreeWriter[I, K]) insert(zNode *node[I, K]) (bool, error) {
+	y := tree.meta.Null
+	temp := tree.meta.Root
+
+	for temp != tree.meta.Null {
 		y = temp
 		switch zNode.key.Compare(tree.arr.Get(temp).key) {
 		case -1:
@@ -17,9 +79,11 @@ func (tree *RBTree[I, K]) insert(zNode *node[I, K]) (bool, error) {
 	}
 
 	zNode.parent = y
-	z := tree.arr.Push(*zNode)
-	if y == tree.meta.null {
-		tree.meta.root = z
+	zNode.left = tree.meta.Null
+	zNode.right = tree.meta.Null
+	z := tree.arr.Push(zNode)
+	if y == tree.meta.Null {
+		tree.meta.Root = z
 	} else {
 		switch zNode.key.Compare(tree.arr.Get(y).key) {
 		case -1:
@@ -29,16 +93,13 @@ func (tree *RBTree[I, K]) insert(zNode *node[I, K]) (bool, error) {
 		}
 	}
 
-	zNode.left = tree.meta.null
-	zNode.right = tree.meta.null
-
 	tree.fixInsert(z)
 
-	tree.meta.count++
+	tree.meta.Count++
 	return true, nil
 }
 
-func (tree *RBTree[I, K]) fixInsert(z I) {
+func (tree *RBTreeWriter[I, K]) fixInsert(z I) {
 	for tree.arr.Get(tree.arr.Get(z).parent).isRed() {
 		if tree.arr.Get(z).parent == tree.arr.Get(tree.arr.Get(tree.arr.Get(z).parent).parent).left { // first 3 cases
 			y := tree.arr.Get(tree.arr.Get(tree.arr.Get(z).parent).parent).right // z uncle
@@ -83,21 +144,21 @@ func (tree *RBTree[I, K]) fixInsert(z I) {
 		}
 	}
 
-	tree.arr.Get(tree.meta.root).setBlack()
+	tree.arr.Get(tree.meta.Root).setBlack()
 }
 
-func (tree *RBTree[I, K]) leftRotate(x I) {
+func (tree *RBTreeWriter[I, K]) leftRotate(x I) {
 	y := tree.arr.Get(x).right
 
 	tree.arr.Get(x).right = tree.arr.Get(y).left
-	if tree.arr.Get(y).left != tree.meta.null {
+	if tree.arr.Get(y).left != tree.meta.Null {
 		tree.arr.Get(tree.arr.Get(y).left).parent = x
 	}
 
 	tree.arr.Get(y).parent = tree.arr.Get(x).parent
 
-	if tree.arr.Get(x).parent == tree.meta.null { // x is root
-		tree.meta.root = y
+	if tree.arr.Get(x).parent == tree.meta.Null { // x is root
+		tree.meta.Root = y
 	} else {
 		if tree.arr.Get(tree.arr.Get(x).parent).left == x { // x is left child
 			tree.arr.Get(tree.arr.Get(x).parent).left = y
@@ -110,18 +171,18 @@ func (tree *RBTree[I, K]) leftRotate(x I) {
 	tree.arr.Get(x).parent = y
 }
 
-func (tree *RBTree[I, K]) rightRotate(x I) {
+func (tree *RBTreeWriter[I, K]) rightRotate(x I) {
 	y := tree.arr.Get(x).left
 
 	tree.arr.Get(x).left = tree.arr.Get(y).right
-	if tree.arr.Get(y).right != tree.meta.null {
+	if tree.arr.Get(y).right != tree.meta.Null {
 		tree.arr.Get(tree.arr.Get(y).right).parent = x
 	}
 
 	tree.arr.Get(y).parent = tree.arr.Get(x).parent
 
-	if tree.arr.Get(x).parent == tree.meta.null { // x is root
-		tree.meta.root = y
+	if tree.arr.Get(x).parent == tree.meta.Null { // x is root
+		tree.meta.Root = y
 	} else {
 		if tree.arr.Get(tree.arr.Get(x).parent).right == x { // x is right child
 			tree.arr.Get(tree.arr.Get(x).parent).right = y

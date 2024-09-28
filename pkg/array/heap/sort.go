@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"container/heap"
 	"fmt"
+	"ip_addr_counter/pkg/array"
 	"time"
 )
 
-func HeapSort[T Integer](arr Array[T]) Array[T] {
+func HeapSort[T array.Integer](arr array.Array[T]) array.Array[T] {
 	initialArr := arr
 	lastIndex := initialArr.Len() - 1
 
