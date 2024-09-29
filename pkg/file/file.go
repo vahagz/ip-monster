@@ -1,9 +1,7 @@
 package file
 
 import (
-	"bytes"
 	"fmt"
-	"os"
 )
 
 func New() *VirtualFile {
@@ -14,7 +12,7 @@ type Interface interface {
 	Truncate(size uint64) error
 	Slice(from, n uint64) []byte
 	Size() uint64
-	WriteTo(f *os.File) (n int64, err error)
+	// WriteTo(f *os.File) (n int64, err error)
 }
 
 type VirtualFile struct {
@@ -59,6 +57,6 @@ func (vf *VirtualFile) Slice(from, n uint64) []byte {
 // 	return n, err
 // }
 
-func (vf *VirtualFile) WriteTo(f *os.File) (n int64, err error) {
-	return f.ReadFrom(bytes.NewBuffer(vf.data))
-}
+// func (vf *VirtualFile) WriteTo(f *os.File) (n int64, err error) {
+// 	return f.ReadFrom(bytes.NewBuffer(vf.data))
+// }

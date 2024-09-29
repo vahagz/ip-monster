@@ -30,9 +30,9 @@ func (of *OSFile) Size() uint64 {
 	return uint64(stat.Size())
 }
 
-func (of *OSFile) WriteTo(f *os.File) (n int64, err error) {
-	return f.ReadFrom(of.file)
-}
+// func (of *OSFile) WriteTo(f *os.File) (n int64, err error) {
+// 	return f.ReadFrom(of.file)
+// }
 
 // func (of *OSFile) ReadAt(b []byte, off int64) (n int, err error) {
 // 	return of.file.ReadAt(b, off)

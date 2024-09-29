@@ -90,6 +90,30 @@ func (tree *BTree[I, K, KL, CL]) newNodeWithData(data *nodeData[KL, CL]) *node[I
 	return newNodeWithData[I, K](data)
 }
 
+func (tree *BTree[I, K, KL, CL]) isFull(n *node[I, K, KL, CL]) bool {
+	return n.data.count == 2*tree.meta.Degree-1
+}
+
+func (tree *BTree[I, K, KL, CL]) search(key K) (
+	arrIndex I,
+	node *node[I, K, KL, CL],
+	nodeIndex int,
+	found bool,
+) {
+	arrIndex = tree.meta.Root
+	node = tree.get(arrIndex)
+	nodeIndex, found = node.search(key)
+	for !node.data.isLeaf {
+		if found {
+			return
+		}
+		arrIndex = node.children[nodeIndex]
+		node = tree.get(arrIndex)
+		nodeIndex, found = node.search(key)
+	}
+	return
+}
+
 func (tree *BTree[I, K, KL, CL]) insert(key K) bool {
 	if tree.Count() == 0 {
 		root := newNode[I, K, KL, CL](tree.meta.Degree, true)
@@ -99,8 +123,15 @@ func (tree *BTree[I, K, KL, CL]) insert(key K) bool {
 		return true
 	}
 
+	arrIndex, node, _, found := tree.search(key)
+	if found {
+		return false
+	} else if !tree.isFull(node) {
+		return tree.insertNonFull(arrIndex, key)
+	}
+
 	rootNode := tree.get(tree.meta.Root)
-	if rootNode.data.count < 2*tree.meta.Degree-1 {
+	if !tree.isFull(rootNode) {
 		return tree.insertNonFull(tree.meta.Root, key)
 	}
 
@@ -146,7 +177,7 @@ func (tree *BTree[I, K, KL, CL]) insertNonFull(n I, key K) bool {
 		return false
 	}
 
-	if cNode.data.count == 2*tree.meta.Degree-1 {
+	if tree.isFull(cNode) {
 		tree.splitChild(n, i, c)
 		nNode = tree.get(n)
 		c = nNode.children[i]
@@ -163,27 +194,18 @@ func (tree *BTree[I, K, KL, CL]) splitChild(n I, i int, y I) {
 	zNode := tree.newNode(yNode.data.isLeaf)
 	zNode.data.count = tree.meta.Degree - 1
 
-	for j := range tree.meta.Degree - 1 {
-		zNode.keys[j] = yNode.keys[j+tree.meta.Degree]
-	}
-
+	copy(zNode.keys, yNode.keys[tree.meta.Degree:])
 	if !yNode.data.isLeaf {
-		for j := range tree.meta.Degree {
-			zNode.children[j] = yNode.children[j+tree.meta.Degree]
-		}
+		copy(zNode.children, yNode.children[tree.meta.Degree:])
 	}
 
 	yNode.data.count = tree.meta.Degree - 1
-	for j := nNode.data.count; j >= i+1; j-- {
-		nNode.children[j+1] = nNode.children[j]
-	}
+	copy(nNode.children[i+2:], nNode.children[i+1:nNode.data.count+1])
 
 	z := tree.push(zNode)
 	nNode.children[i+1] = z
 
-	for j := nNode.data.count - 1; j >= i; j-- {
-		nNode.keys[j+1] = nNode.keys[j]
-	}
+	copy(nNode.keys[i+1:], nNode.keys[i:nNode.data.count])
 
 	nNode.keys[i] = yNode.keys[tree.meta.Degree-1]
 	nNode.data.count++
