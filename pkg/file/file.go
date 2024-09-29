@@ -14,6 +14,7 @@ type Interface interface {
 	Truncate(size uint64) error
 	Slice(from, n uint64) []byte
 	Size() uint64
+	WriteTo(f *os.File) (n int64, err error)
 }
 
 type VirtualFile struct {

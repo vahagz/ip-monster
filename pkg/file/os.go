@@ -1,6 +1,8 @@
 package file
 
-import "os"
+import (
+	"os"
+)
 
 type OSFile struct {
 	file *os.File
@@ -26,6 +28,10 @@ func (of *OSFile) Size() uint64 {
 		panic(err)
 	}
 	return uint64(stat.Size())
+}
+
+func (of *OSFile) WriteTo(f *os.File) (n int64, err error) {
+	return f.ReadFrom(of.file)
 }
 
 // func (of *OSFile) ReadAt(b []byte, off int64) (n int, err error) {

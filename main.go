@@ -33,11 +33,11 @@ const tPath = "btree"
 
 // const elementsToRead = 53_687_090 // == ~1GB rbtree file
 // const elementsToRead = 15_000_000 // == ~1GB btree file
-const elementsToRead = 10_000_000
+const elementsToRead = 50_000_000
 
 const arrayIndexSize = 4
 
-const degree = 100
+const degree = 10
 const maxChildCount = 2 * degree
 const minChildCount = degree
 const maxKeyCount = maxChildCount - 1
@@ -50,30 +50,33 @@ var virtualFileSIze = maxNodeCount * btree.NodeSize[uint32, ip.IP, KL, CL]()
 type KL [maxKeyCount * ip.IpSize]byte
 type CL [maxChildCount * arrayIndexSize]byte
 
+
+func processStage(
+	pwd string,
+	metaArr *[]*btree.Metadata[uint32],
+	t *btree.BTree[uint32, ip.IP, KL, CL],
+) *btree.BTree[uint32, ip.IP, KL, CL] {
+	tFile := util.Must(os.OpenFile(
+		path.Join(pwd, dataFolder, tPath + fmt.Sprintf("_%v", len(*metaArr))),
+		os.O_RDWR|os.O_CREATE|os.O_TRUNC,
+		os.ModePerm,
+	))
+	util.Must(t.File().WriteTo(tFile))
+	util.PanicIfErr(tFile.Close())
+
+	*metaArr = append(*metaArr, t.Meta())
+	meta := t.Meta()
+	meta.Count = 0
+	meta.Root = 0
+	return btree.New[uint32, ip.IP, KL, CL](t.File(), meta)
+}
+
 func main() {
 	pwd := util.Must(os.Getwd())
 	ipFile := util.Must(os.Open(path.Join(pwd, dataFolder, ipPath)))
 	ipIterator := ip.Iterator(ipFile, ipPageSize, ipCacheSize)
 	n := uint64(0)
 	start := time.Now()
-	mbPrev := float64(0)
-	stepsCount := 10
-	mbPrevSteps := make([]float64, stepsCount)
-	mbPrevStepsCursor := 0
-	mbPrevSum := func () float64 {
-		sum := float64(0)
-		for _, mb := range mbPrevSteps {
-			sum += mb
-		}
-		return sum
-	}
-	addPrevMb := func (mb float64) {
-		mbPrevSteps[mbPrevStepsCursor] = mb
-		mbPrevStepsCursor++
-		if mbPrevStepsCursor == len(mbPrevSteps) {
-			mbPrevStepsCursor = 0
-		}
-	}
 
 	go func() {
 		for {
@@ -81,25 +84,19 @@ func main() {
 			offset := util.Must(ipFile.Seek(0, io.SeekCurrent))
 			mb := float64(offset) / float64(1024 * 1024)
 			sec := time.Since(start).Seconds()
-			addPrevMb(mb - mbPrev)
-			mbPrev = mb
 			fmt.Printf(
-				"elem %d, file %v mb, %d sec, %.2f avg mbps, %.2f curr mbps, %d eps, iter %d\n",
-				n, uint64(mb), uint64(sec), mb / sec, mbPrevSum() / float64(stepsCount),
+				"elem %d, file %v mb, %d sec, %.2f avg mbps, %d eps, iter %d\n",
+				n, uint64(mb), uint64(sec), mb / sec,
 				n / uint64(sec), len(ipIterator),
 			)
 		}
 	}()
 
+	stage := 0
+	ipParser := ip.Parser()
 	virtualFile := file.New()
-
-	// virtualFile.Truncate(uint64((elementsToRead + 1) * rbtree.NodeSize[uint32, IP]()))
-	// t := rbtree.NewWriter[uint32, IP](virtualFile, nil)
-	// tMetaArr := []*rbtree.Metadata[uint32]{}
 	virtualFile.Truncate(uint64(virtualFileSIze))
-	t := btree.New[uint32, ip.IP, KL, CL](virtualFile, &btree.Metadata[uint32]{
-		Degree: degree,
-	})
+	t := btree.New[uint32, ip.IP, KL, CL](virtualFile, &btree.Metadata[uint32]{Degree: degree})
 	tMetaArr := []*btree.Metadata[uint32]{}
 
 	fmt.Println("nodeSize", btree.NodeSize[uint32, ip.IP, KL, CL]())
@@ -107,43 +104,21 @@ func main() {
 	fmt.Println("minNodeCount", minNodeCount)
 	fmt.Println("virtualFile", virtualFileSIze)
 
-	ipParser := ip.Parser()
-	stage := 0
-	processStage := func () {
-		stage++
-		tFile := util.Must(os.OpenFile(
-			path.Join(pwd, dataFolder, tPath + fmt.Sprintf("_%v", len(tMetaArr))),
-			os.O_RDWR|os.O_CREATE|os.O_TRUNC,
-			os.ModePerm,
-		))
-		util.Must(virtualFile.WriteTo(tFile))
-		util.PanicIfErr(tFile.Close())
-
-		tMetaArr = append(tMetaArr, t.Meta())
-		// t = rbtree.NewWriter[uint32, IP](vf, nil)
-		t = btree.New[uint32, ip.IP, KL, CL](virtualFile, &btree.Metadata[uint32]{
-			Degree: degree,
-		})
-	}
-
 	for itm := range ipIterator {
 		n++
 		k := ip.IP(binary.BigEndian.Uint32(util.Must(ipParser.Parse(itm))))
-		if k == 1116729894 {
-			fmt.Println(k)
-		}
-
 		t.Put(k)
 		if t.Count() == elementsToRead {
 			fmt.Println(virtualFile.Size())
 			fmt.Println("STAGE", stage + 1, t.Count(), *t.Meta(), time.Since(start))
-			processStage()
+			t = processStage(pwd, &tMetaArr, t)
+			stage++
 		}
 	}
 
 	if t.Count() != elementsToRead {
 		fmt.Println("STAGE", stage + 1, t.Count(), *t.Meta(), time.Since(start))
-		processStage()
+		processStage(pwd, &tMetaArr, t)
 	}
 
 	for _, meta := range tMetaArr {

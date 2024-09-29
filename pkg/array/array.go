@@ -36,6 +36,7 @@ type Array[T Integer] interface {
 	Slice(from, to T) Array[T]
 	Truncate(size T)
 	Grow(size T)
+	File() file.Interface
 }
 
 func New[T Integer](file file.Interface, elemSize int, length uint64) Array[T] {
@@ -138,6 +139,10 @@ func (a *array[T]) Grow(size T) {
 		a.Truncate(size)
 	}
 	a.length = size
+}
+
+func (a *array[T]) File() file.Interface {
+	return a.file
 }
 
 func (a *array[T]) checkBounds(index T) {

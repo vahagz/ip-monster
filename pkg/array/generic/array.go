@@ -25,6 +25,7 @@ type Array[I array.Integer, T Elem, PT ElemPointer[T]] interface {
 	Len() I
 	Cap() I
 	Slice(from, to I) Array[I, T, PT]
+	File() file.Interface
 }
 
 type arrayGeneric[I array.Integer, T Elem, PT ElemPointer[T]] struct {
@@ -93,4 +94,8 @@ func (a *arrayGeneric[I, T, PT]) Slice(from, to I) Array[I, T, PT] {
 
 func (a *arrayGeneric[I, T, PT]) Truncate(size I) {
 	a.arr.Truncate(size)
+}
+
+func (a *arrayGeneric[I, T, PT]) File() file.Interface {
+	return a.arr.File()
 }
