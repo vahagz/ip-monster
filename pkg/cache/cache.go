@@ -2,7 +2,6 @@ package cache
 
 import (
 	"cmp"
-	"fmt"
 
 	"github.com/emirpasic/gods/maps/treemap"
 )
@@ -17,7 +16,7 @@ type Cache[T cmp.Ordered, C any] struct {
 	size     int
 	items    *treemap.Map
 	priority *treemap.Map
-	pinned   map[T]C
+	// pinned   map[T]C
 	onDelete func(key T, item C)
 }
 
@@ -37,14 +36,14 @@ func New[T cmp.Ordered, C any](size int, onDelete func(key T, item C)) *Cache[T,
 			}
 			return res
 		}),
-		pinned: map[T]C{},
+		// pinned: map[T]C{},
 	}
 }
 
 func (c *Cache[T, C]) Add(key T, val C) {
-	if _, ok := c.pinned[key]; ok {
+	/*if _, ok := c.pinned[key]; ok {
 		panic(fmt.Errorf("can't add already pinned key: %v", key))
-	} else if _, ok := c.items.Get(key); ok {
+	} else */if _, ok := c.items.Get(key); ok {
 		return
 	}
 
@@ -59,9 +58,9 @@ func (c *Cache[T, C]) Add(key T, val C) {
 }
 
 func (c *Cache[T, C]) Get(key T) (C, bool) {
-	if val, ok := c.pinned[key]; ok {
-		return val, true
-	}
+	// if val, ok := c.pinned[key]; ok {
+	// 	return val, true
+	// }
 
 	val, ok := c.items.Get(key)
 	if !ok {
@@ -78,9 +77,9 @@ func (c *Cache[T, C]) Get(key T) (C, bool) {
 }
 
 func (c *Cache[T, C]) Del(key T) {
-	if _, ok := c.pinned[key]; ok {
-		return
-	}
+	// if _, ok := c.pinned[key]; ok {
+	// 	return
+	// }
 
 	val, ok := c.items.Get(key)
 	if !ok {
@@ -103,33 +102,35 @@ func (c *Cache[T, C]) Flush() {
 	c.Clear()
 }
 
-func (c *Cache[T, C]) Pin(key T, val C) *Pinned[T, C] {
-	c.Del(key)
-	c.pinned[key] = val
-	return &Pinned[T, C]{
-		Val:   val,
-		key:   key,
-		cache: c,
-	}
-}
+// func (c *Cache[T, C]) Pin(key T, val C) *Pinned[T, C] {
+// 	c.Del(key)
+// 	c.pinned[key] = val
+// 	return &Pinned[T, C]{
+// 		Val:   val,
+// 		key:   key,
+// 		cache: c,
+// 	}
+// }
 
 // func (c *Cache[T, C]) Pin(key T, val C) {
 // 	c.Del(key)
 // 	c.pinned[key] = val
 // }
 
-func (c *Cache[T, C]) Unpin(key T) {
-	val, ok := c.pinned[key]
-	if !ok {
-		return
-	}
+// func (c *Cache[T, C]) Unpin(key T) {
+// 	val, ok := c.pinned[key]
+// 	if !ok {
+// 		return
+// 	}
 
-	delete(c.pinned, key)
-	c.Add(key, val)
-}
+// 	delete(c.pinned, key)
+// 	c.Add(key, val)
+// }
 
 func (c *Cache[T, C]) freeSpace(itm item[T, C]) {
 	c.priority.Remove(itm)
-	c.onDelete(itm.key, itm.val)
+	if c.onDelete != nil {
+		c.onDelete(itm.key, itm.val)
+	}
 	c.items.Remove(itm.key)
 }

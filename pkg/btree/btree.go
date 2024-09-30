@@ -3,8 +3,11 @@ package btree
 import (
 	a "ip_addr_counter/pkg/array"
 	array "ip_addr_counter/pkg/array/generic"
+	"ip_addr_counter/pkg/cache"
 	"ip_addr_counter/pkg/file"
 )
+
+const ScanCacheSize = 10
 
 func New[I a.Integer, K Key, KL, CL any](file file.Interface, meta *Metadata[I]) *BTree[I, K, KL, CL] {
 	arr := array.New[I, nodeData[KL, CL]](file, NodeSize[I, K, KL, CL](), meta.Count)
@@ -57,11 +60,12 @@ func (tree *BTree[I, K, KL, CL]) Scan(fn func(k K)) {
 	if tree.Count() == 0 {
 		return
 	}
-	tree.traverse(tree.meta.Root, fn)
+	c := cache.New[I, *node[I, K, KL, CL]](ScanCacheSize, nil)
+	tree.traverse(c, tree.meta.Root, fn)
 }
 
-func (tree *BTree[I, K, KL, CL]) Iterator() <-chan K {
-	ch := make(chan K)
+func (tree *BTree[I, K, KL, CL]) Iterator(cacheSize int) <-chan K {
+	ch := make(chan K, cacheSize)
 	go func () {
 		tree.Scan(func(k K) {
 			ch <- k
@@ -71,17 +75,22 @@ func (tree *BTree[I, K, KL, CL]) Iterator() <-chan K {
 	return ch
 }
 
-func (tree *BTree[I, K, KL, CL]) traverse(n I, fn func(k K)) {
-	nNode := tree.get(n)
+func (tree *BTree[I, K, KL, CL]) traverse(c *cache.Cache[I, *node[I, K, KL, CL]], n I, fn func(k K)) {
+	nNode, ok := c.Get(n)
+	if !ok {
+		nNode = tree.get(n)
+		c.Add(n, nNode)
+	}
+
 	for i := range nNode.data.count {
     if !nNode.data.isLeaf {
-			tree.traverse(nNode.children[i], fn)
+			tree.traverse(c, nNode.children[i], fn)
 		}
 		fn(nNode.keys[i])
   }
 
 	if !nNode.data.isLeaf {
-		tree.traverse(nNode.children[nNode.data.count], fn)
+		tree.traverse(c, nNode.children[nNode.data.count], fn)
 	}
 }
 

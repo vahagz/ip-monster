@@ -35,11 +35,14 @@ func (sq *iteratorQueue[K]) Pop() any {
 	return top
 }
 
-func MultIterator[I a.Integer, K Key, KL, CL any](treeArr []*BTree[I, K, KL, CL]) <-chan K {
-	ch := make(chan K, len(treeArr))
+func MultIterator[I a.Integer, K Key, KL, CL any](
+	treeArr []*BTree[I, K, KL, CL],
+	multiIteratorCacheSize, perTreeCacheSize int,
+) <-chan K {
+	ch := make(chan K, multiIteratorCacheSize)
 	sq := &iteratorQueue[K]{}
 	for _, t := range treeArr {
-		iter := t.Iterator()
+		iter := t.Iterator(perTreeCacheSize)
 		*sq = append(*sq, queueItem[K]{iterator: iter, last: <-iter})
 	}
 
