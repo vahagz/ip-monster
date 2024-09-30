@@ -17,7 +17,7 @@ func Must[T any](val T, err error) T {
 
 func SetInterval(f func(start, now time.Time), interval time.Duration) {
 	start := time.Now()
-	go func ()  {
+	go func () {
 		for range time.Tick(time.Second) { f(start, time.Now()) }
 	}()
 }

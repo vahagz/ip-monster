@@ -828,8 +828,8 @@ import (
 const dataFolder = "data"
 const dstFolder = "dst"
 
-const ipPath = "ip_addresses.xml"
-// const ipPath = "addreses - Copy.txt"
+// const ipPath = "ip_addresses.xml"
+const ipPath = "addreses - Copy.txt"
 const ipPageSize = 4 * 1024 * 1024 // 4MB
 const ipCacheSize = 1024
 const ipIteratorCount = 10
@@ -839,7 +839,7 @@ const tPath = "btree"
 
 // const elementsToRead = 53_687_090 // == ~1GB rbtree file
 // const elementsToRead = 55_924_053 // == ~1GB btree file if degree == 10
-const elementsToRead = 10_000_000
+const elementsToRead = 1_000_000
 
 const arrayIndexSize = 4
 
@@ -852,18 +852,19 @@ const minKeyCount = degree - 1
 var maxNodeCount = int(math.Ceil(float64(elementsToRead) / float64(minKeyCount)))
 var minNodeCount = int(math.Ceil(float64(elementsToRead) / float64(maxKeyCount)))
 var nodeSize = btree.NodeSize[uint32, ip.IP, KL, CL]()
-var virtualFileSIze = maxNodeCount * nodeSize
+var virtualFileSize = maxNodeCount * nodeSize
 
-type KL [maxKeyCount * ip.IpSize]byte
-type CL [maxChildCount * arrayIndexSize]byte
-
+type KL    = [maxKeyCount * ip.IpSize]byte
+type CL    = [maxChildCount * arrayIndexSize]byte
+type Meta  = btree.Metadata[uint32]
+type BTree = btree.BTree[uint32, ip.IP, KL, CL]
 
 func processStage(
 	pwd string,
 	i int,
-	metaArr *[]*btree.Metadata[uint32],
-	t *btree.BTree[uint32, ip.IP, KL, CL],
-) *btree.BTree[uint32, ip.IP, KL, CL] {
+	metaArr *[]*Meta,
+	t *BTree,
+) *BTree {
 	tFile := util.Must(os.OpenFile(
 		path.Join(pwd, dataFolder, dstFolder, tPath + fmt.Sprintf("_%v_%v", i, len(*metaArr))),
 		os.O_RDWR|os.O_CREATE|os.O_TRUNC,
@@ -900,8 +901,8 @@ func main() {
 	fmt.Println("nodeSize", btree.NodeSize[uint32, ip.IP, KL, CL]())
 	fmt.Println("maxNodeCount", maxNodeCount)
 	fmt.Println("minNodeCount", minNodeCount)
-	fmt.Println("virtualFile", virtualFileSIze)
-	tMetas := make([][]*btree.Metadata[uint32], len(ipIterators))
+	fmt.Println("virtualFile", virtualFileSize)
+	tMetas := make([][]*Meta, len(ipIterators))
 	wg := sync.WaitGroup{}
 
 	for i, iterator := range ipIterators {
@@ -911,9 +912,9 @@ func main() {
 			stage := 0
 			ipParser := ip.Parser()
 			virtualFile := file.New()
-			virtualFile.Truncate(uint64(virtualFileSIze))
-			t := btree.New[uint32, ip.IP, KL, CL](virtualFile, &btree.Metadata[uint32]{Degree: degree})
-			tMetas[i] = []*btree.Metadata[uint32]{}
+			virtualFile.Truncate(uint64(virtualFileSize))
+			t := btree.New[uint32, ip.IP, KL, CL](virtualFile, &Meta{Degree: degree})
+			tMetas[i] = []*Meta{}
 
 			for itm := range iterator {
 				atomic.AddUint64(&n, 1)
@@ -933,12 +934,36 @@ func main() {
 		}(i, iterator)
 	}
 
+	treeArr := []*BTree{}
+	// tMetas = [][]*Meta{
+	// 	{{Degree:10,Count:500,Root:21},{Degree:10,Count:500,Root:21},{Degree:10,Count:500,Root:21},{Degree:10,Count:324,Root:21}},
+	// 	{{Degree:10,Count:500,Root:21},{Degree:10,Count:500,Root:21},{Degree:10,Count:500,Root:21},{Degree:10,Count:374,Root:21}},
+	// }
+
 	wg.Wait()
 	for i, arr := range tMetas {
 		for j, meta := range arr {
 			fmt.Println(i, j, *meta)
+			treeArr = append(treeArr, btree.New[uint32, ip.IP, KL, CL](file.NewFromOSFile(
+				util.Must(os.OpenFile(
+					path.Join(pwd, dataFolder, dstFolder, tPath + fmt.Sprintf("_%d_%d", i, j)),
+					os.O_RDONLY,
+					os.ModePerm,
+				)),
+			), meta))
 		}
 	}
+
+	last := ip.IP(math.MaxUint32)
+	uniqCount := 0
+	for key := range btree.MultIterator(treeArr) {
+		if last != key {
+			last = key
+			uniqCount++
+		}
+	}
+	fmt.Println(uniqCount, time.Since(start))
+
 
 	// cnt := 0
 	// max := IP(0)
@@ -947,7 +972,7 @@ func main() {
 	// }, time.Second)
 
 	// rbtArr := []*rbtree.RBTreeReader[uint32, IP]{}
-	// tMetaArr := []*rbtree.Metadata[uint32]{
+	// tMetaArr := []*rMeta{
 	// 	{NodeKeySize: 4, Root: 66,   Null: 0, Count: 53687089},
 	// 	{NodeKeySize: 4, Root: 8057, Null: 0, Count: 53687090},
 	// 	{NodeKeySize: 4, Root: 952,  Null: 0, Count: 53687090},

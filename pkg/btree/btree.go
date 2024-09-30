@@ -7,7 +7,7 @@ import (
 )
 
 func New[I a.Integer, K Key, KL, CL any](file file.Interface, meta *Metadata[I]) *BTree[I, K, KL, CL] {
-	arr := array.New[I, nodeData[KL, CL]](file, NodeSize[I, K, KL, CL](), 0)
+	arr := array.New[I, nodeData[KL, CL]](file, NodeSize[I, K, KL, CL](), meta.Count)
 	return &BTree[I, K, KL, CL]{
 		arr:  arr,
 		meta: meta,
@@ -58,6 +58,17 @@ func (tree *BTree[I, K, KL, CL]) Scan(fn func(k K)) {
 		return
 	}
 	tree.traverse(tree.meta.Root, fn)
+}
+
+func (tree *BTree[I, K, KL, CL]) Iterator() <-chan K {
+	ch := make(chan K)
+	go func () {
+		tree.Scan(func(k K) {
+			ch <- k
+		})
+		close(ch)
+	}()
+	return ch
 }
 
 func (tree *BTree[I, K, KL, CL]) traverse(n I, fn func(k K)) {
