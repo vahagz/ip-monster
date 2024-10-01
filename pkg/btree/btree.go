@@ -76,6 +76,26 @@ func (tree *BTree[I, K, KL, CL]) Iterator(cacheSize int) <-chan K {
 	return ch
 }
 
+func (tree *BTree[I, K, KL, CL]) Min() K {
+	curr := tree.meta.Root
+	currNode := tree.get(curr)
+	for !currNode.data.isLeaf {
+		curr = currNode.children[0]
+		currNode = tree.get(curr)
+	}
+	return currNode.keys[0]
+}
+
+func (tree *BTree[I, K, KL, CL]) Max() K {
+	curr := tree.meta.Root
+	currNode := tree.get(curr)
+	for !currNode.data.isLeaf {
+		curr = currNode.children[currNode.data.count-1]
+		currNode = tree.get(curr)
+	}
+	return currNode.keys[currNode.data.count-1]
+}
+
 func (tree *BTree[I, K, KL, CL]) traverse(c *cache.Cache[I, *node[I, K, KL, CL]], n I, fn func(k K)) {
 	nNode, ok := c.Get(n)
 	if !ok {

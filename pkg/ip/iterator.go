@@ -2,23 +2,38 @@ package ip
 
 import (
 	"bytes"
+	"encoding/binary"
 	"io"
+	"math"
 	"os"
+	"sync"
 
 	"ip_addr_counter/pkg/util"
 )
 
 const MaxIpAddrSize = len("255.255.255.255\r\n")
 const MinIpAddrSize = len("0.0.0.0\r\n")
+const MaxIpAddrValue = math.MaxUint32
 
-func Iterator(file *os.File, pageSize, chanSize, count int) []<-chan []byte {
-	chArr := make([]<-chan []byte, count)
+func Iterator(file *os.File, pageSize, chanSize, count int) []chan uint32 {
+	chArr := make([]chan uint32, count)
 	offsets := getOffsets(file, count)
 	fileSize := util.Must(file.Stat()).Size()
+	wg := &sync.WaitGroup{}
+	wg.Add(count)
+	go func () {
+		wg.Wait()
+		for i := range count {
+			close(chArr[i])
+		}
+	}()
 
 	for i := range count {
-		ch := make(chan []byte, chanSize)
+		ch := make(chan uint32, chanSize)
 		chArr[i] = ch
+	}
+
+	for i := range count {
 		from, to := int64(offsets[i]), int64(0)
 		if i == count - 1 {
 			to = fileSize
@@ -28,44 +43,53 @@ func Iterator(file *os.File, pageSize, chanSize, count int) []<-chan []byte {
 		readCount := to - from
 
 		go func (i int) {
+			defer wg.Done()
+			ipParser := Parser()
 			buf := bytes.NewBuffer(make([]byte, 0, pageSize))
 			read := int64(0)
 			for {
 				ip, err := buf.ReadBytes('\n')
 				if err == io.EOF {
-					buf.Write(ip)
-					buf.Grow(len(ip) + pageSize)
-					b := buf.Bytes()
-					b = b[:cap(b)]
-					n, err := file.ReadAt(b[len(ip):], from)
+					n, err := readPage(file, pageSize, buf, ip, from)
 					from += int64(n)
-					buf = bytes.NewBuffer(b[:len(ip) + n])
-					if err == io.EOF {
-						if n == 0 {
-							break
-						}
-					} else if err != nil {
+					if n == 0 && err == io.EOF {
+						break
+					} else if err != io.EOF && err != nil {
 						panic(err)
 					}
 				} else if err != nil {
 					panic(err)
 				} else {
 					read += int64(len(ip))
-					ip = ip[:len(ip) - 1]
-					if ip[len(ip)-1] == '\r' {
-						ip = ip[:len(ip) - 1]
-					}
-					ch <- ip
+					send(chArr, ipParser, ip)
 					if read >= readCount {
 						break
 					}
 				}
 			}
-			close(ch)
 		}(i)
 	}
 
 	return chArr
+}
+
+func readPage(file *os.File, pageSize int, buf *bytes.Buffer, halfReadIp []byte, from int64) (int, error) {
+	buf.Write(halfReadIp)
+	buf.Grow(len(halfReadIp) + pageSize)
+	b := buf.Bytes()
+	b = b[:cap(b)]
+	n, err := file.ReadAt(b[len(halfReadIp):], from)
+	*buf = *bytes.NewBuffer(b[:len(halfReadIp) + n])
+	return n, err
+}
+
+func send(chArr []chan uint32, parser *parser, ip []byte) {
+	ip = ip[:len(ip) - 1]
+	if ip[len(ip)-1] == '\r' {
+		ip = ip[:len(ip) - 1]
+	}
+	ipParsed := binary.BigEndian.Uint32(util.Must(parser.Parse(ip)))
+	chArr[getIndex(ipParsed, len(chArr))] <- ipParsed
 }
 
 func getOffsets(file *os.File, count int) []int64 {
@@ -83,4 +107,8 @@ func getOffsets(file *os.File, count int) []int64 {
 	}
 
 	return offsets
+}
+
+func getIndex(ip uint32, count int) int {
+	return int(float64(count - 1) * float64(ip) / float64(MaxIpAddrValue))
 }
