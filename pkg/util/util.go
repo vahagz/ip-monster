@@ -15,9 +15,22 @@ func Must[T any](val T, err error) T {
 	return val
 }
 
-func SetInterval(f func(start, now time.Time), interval time.Duration) {
+func SetInterval(f func(start, now time.Time), interval time.Duration) (stop func()) {
 	start := time.Now()
+	stopChan := make(chan struct{}, 1)
 	go func () {
-		for range time.Tick(time.Second) { f(start, time.Now()) }
+		L: for {
+			select {
+			case now := <-time.Tick(time.Second):
+				f(start, now)
+			case <-stopChan:
+				close(stopChan)
+				break L
+			}
+		}
 	}()
+
+	return func() {
+		stopChan <- struct{}{}
+	}
 }

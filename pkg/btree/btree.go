@@ -60,6 +60,7 @@ func (tree *BTree[I, K, KL, CL]) Scan(fn func(k K)) {
 	if tree.Count() == 0 {
 		return
 	}
+
 	c := cache.New[I, *node[I, K, KL, CL]](ScanCacheSize, nil)
 	tree.traverse(c, tree.meta.Root, fn)
 }
@@ -92,6 +93,8 @@ func (tree *BTree[I, K, KL, CL]) traverse(c *cache.Cache[I, *node[I, K, KL, CL]]
 	if !nNode.data.isLeaf {
 		tree.traverse(c, nNode.children[nNode.data.count], fn)
 	}
+
+	tree.arr.Return(nNode.data)
 }
 
 func (tree *BTree[I, K, KL, CL]) get(i I) *node[I, K, KL, CL] {

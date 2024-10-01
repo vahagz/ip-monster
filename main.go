@@ -17,8 +17,9 @@ import (
 
 const dataFolder = "data"
 
-const dstFolder = "dst2"; const ipPath = "ip_addresses.xml"
+// const dstFolder = "dst2"; const ipPath = "ip_addresses.xml"
 // const dstFolder = "dst"; const ipPath = "addreses - Copy.txt"
+const dstFolder = "dst"; const ipPath = "addreses2 - Copy.txt"
 
 const ipPageSize = 4 * 1024 * 1024 // 4MB
 const ipCacheSize = 1024
@@ -29,7 +30,7 @@ const tPath = "btree"
 
 // const elementsToRead = 53_687_090 // == ~1GB rbtree file
 // const elementsToRead = 55_924_053 // == ~1GB btree file if degree == 10
-const elementsToRead = 10_000_000
+const elementsToRead = 1_000_000
 
 const arrayIndexSize = 4
 
@@ -49,6 +50,8 @@ type CL    = [maxChildCount * arrayIndexSize]byte
 type Meta  = btree.Metadata[uint32]
 type BTree = btree.BTree[uint32, ip.IP, KL, CL]
 
+var m sync.Mutex
+
 func processStage(
 	pwd string,
 	i int,
@@ -64,6 +67,8 @@ func processStage(
 	tFile.ReadFrom(bytes.NewBuffer(t.File().Slice(0, uint64(t.NodeCount()) * uint64(nodeSize))))
 	util.PanicIfErr(tFile.Sync())
 
+	m.Lock()
+	defer m.Unlock()
 	*metaArr = append(*metaArr, t.Meta())
 	*treeArr = append(*treeArr, btree.New[uint32, ip.IP, KL, CL](file.NewFromOSFile(tFile), t.Meta()))
 
@@ -78,20 +83,15 @@ func main() {
 	ipFile := util.Must(os.Open(path.Join(pwd, dataFolder, ipPath)))
 	ipIterators := ip.Iterator(ipFile, ipPageSize, ipCacheSize, ipIteratorCount)
 	writeCount := uint64(0)
-	readCount := uint64(0)
-	uniqCount := uint64(0)
 	start := time.Now()
 
-	go func() {
-		for {
-			time.Sleep(time.Second)
-			sec := time.Since(start).Seconds()
-			fmt.Printf(
-				"writeCount %d, readCount %d, uniqCount %d, %d sec, %d weps, %d reps\n",
-				writeCount, readCount, uniqCount, uint64(sec), writeCount / uint64(sec), readCount / uint64(sec),
-			)
-		}
-	}()
+	stop := util.SetInterval(func(start, now time.Time) {
+		sec := now.Sub(start).Seconds()
+		fmt.Printf(
+			"writeCount %d, sec %d, weps %d\n",
+			writeCount, uint64(sec), writeCount / uint64(sec),
+		)
+	}, time.Second)
 
 	fmt.Println("nodeSize", btree.NodeSize[uint32, ip.IP, KL, CL]())
 	fmt.Println("maxNodeCount", maxNodeCount)
@@ -117,35 +117,43 @@ func main() {
 	// 			k := ip.IP(binary.BigEndian.Uint32(util.Must(ipParser.Parse(itm))))
 	// 			t.Put(k)
 	// 			if t.Count() == elementsToRead {
-	// 				fmt.Println("STAGE0", i, "|", stage, "|", writeCount, "|", t.Count(), "|", t.NodeCount(), "|", *t.Meta(), "|", time.Since(start))
+	// 				fmt.Println("STAGE0", i, "|", stage, "|", writeCount, "|", t.NodeCount(), "|", *t.Meta())
 	// 				t = processStage(pwd, i, &tMetas[i], &treeArr, t)
 	// 				stage++
-	// 				return
 	// 			}
 	// 		}
 
 	// 		if t.Count() != elementsToRead {
-	// 			fmt.Println("STAGE1", i, "|", stage + 1, "|", writeCount, "|", t.Count(), "|", t.NodeCount(), "|", *t.Meta(), "|", time.Since(start))
+	// 			fmt.Println("STAGE1", i, "|", stage, "|", writeCount, "|", t.NodeCount(), "|", *t.Meta())
 	// 			processStage(pwd, i, &tMetas[i], &treeArr, t)
 	// 		}
 	// 	}(i, iterator)
 	// }
 
 	wg.Wait()
-	start = time.Now().Add(-time.Second)
-	last := ip.IP(math.MaxUint32)
+	stop()
+
+	readCount := uint64(0)
+	uniqCount := uint64(0)
+	stop = util.SetInterval(func(start, now time.Time) {
+		sec := now.Sub(start).Seconds()
+		fmt.Printf(
+			"readCount %d, uniqCount %d, sec %d, reps %d\n",
+			readCount, uniqCount, uint64(sec), readCount / uint64(sec),
+		)
+	}, time.Second)
 
 	tMetas = [][]*btree.Metadata[uint32]{
-		{{10,10000000,352221}},
-		{{10,10000000,335658}},
-		{{10,10000000,366975}},
-		{{10,10000000,343976}},
-		{{10,10000000,360879}},
-		{{10,10000000,356779}},
-		{{10,10000000,327094}},
-		{{10,10000000,346502}},
-		{{10,10000000,351592}},
-		{{10,10000000,357243}},
+		{{10,34965,260}},
+		{{10,34426,235}},
+		{{10,34298,229}},
+		{{10,35105,3016}},
+		{{10,33963,2223}},
+		{{10,34965,300}},
+		{{10,34426,235}},
+		{{10,34298,229}},
+		{{10,35105,3002}},
+		{{10,33957,2223}},
 	}
 
 	for i, arr := range tMetas {
@@ -161,9 +169,10 @@ func main() {
 		}
 	}
 
-	const multiIteratorCacheSize = 50000
-	const perTreeCacheSize = 1000000
-	for key := range btree.MultIterator(treeArr[:10], multiIteratorCacheSize, perTreeCacheSize) {
+	const multiIteratorCacheSize = 50_000
+	const perTreeCacheSize = 1_000_000
+	last := ip.IP(math.MaxUint32)
+	for key := range btree.MultIterator(treeArr, multiIteratorCacheSize, perTreeCacheSize) {
 		readCount++
 		if last != key {
 			last = key

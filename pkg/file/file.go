@@ -12,6 +12,7 @@ type Interface interface {
 	Truncate(size uint64) error
 	Slice(from, n uint64) []byte
 	Size() uint64
+	Return(buf []byte)
 	// WriteTo(f *os.File) (n int64, err error)
 }
 
@@ -38,6 +39,8 @@ func (vf *VirtualFile) Truncate(size uint64) error {
 func (vf *VirtualFile) Slice(from, n uint64) []byte {
 	return vf.data[from:from+n]
 }
+
+func (vf *VirtualFile) Return(buf []byte) {}
 
 // func (vf *VirtualFile) ReadAt(b []byte, off int64) (n int, err error) {
 // 	if off >= int64(len(vf.data)) {

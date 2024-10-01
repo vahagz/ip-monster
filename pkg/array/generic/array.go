@@ -5,6 +5,7 @@ import (
 
 	"ip_addr_counter/pkg/array"
 	"ip_addr_counter/pkg/file"
+	"ip_addr_counter/pkg/util"
 )
 
 type Elem interface {  }
@@ -26,6 +27,7 @@ type Array[I array.Integer, T Elem, PT ElemPointer[T]] interface {
 	Cap() I
 	Slice(from, to I) Array[I, T, PT]
 	File() file.Interface
+	Return(val PT)
 }
 
 type arrayGeneric[I array.Integer, T Elem, PT ElemPointer[T]] struct {
@@ -98,4 +100,8 @@ func (a *arrayGeneric[I, T, PT]) Truncate(size I) {
 
 func (a *arrayGeneric[I, T, PT]) File() file.Interface {
 	return a.arr.File()
+}
+
+func (a *arrayGeneric[I, T, PT]) Return(val PT) {
+	a.arr.File().Return(util.ToBytes(val))
 }

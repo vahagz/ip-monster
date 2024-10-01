@@ -12,26 +12,26 @@ type queueItem[K Key] struct {
 
 type iteratorQueue[K Key] []queueItem[K]
 
-func (sq iteratorQueue[K]) Len() int {
-	return len(sq)
+func (iq iteratorQueue[K]) Len() int {
+	return len(iq)
 }
 
-func (sq iteratorQueue[K]) Less(i, j int) bool {
-	return sq[i].last.Compare(sq[j].last) == -1
+func (iq iteratorQueue[K]) Less(i, j int) bool {
+	return iq[i].last.Compare(iq[j].last) == -1
 }
 
-func (sq iteratorQueue[K]) Swap(i, j int) {
-	sq[i], sq[j] = sq[j], sq[i]
+func (iq iteratorQueue[K]) Swap(i, j int) {
+	iq[i], iq[j] = iq[j], iq[i]
 }
 
-func (sq *iteratorQueue[K]) Push(x any) {
-	*sq = append(*sq, x.(queueItem[K]))
+func (iq *iteratorQueue[K]) Push(x any) {
+	*iq = append(*iq, x.(queueItem[K]))
 }
 
-func (sq *iteratorQueue[K]) Pop() any {
-	lastIndex := len(*sq) - 1
-	top := (*sq)[lastIndex]
-	*sq = (*sq)[:lastIndex]
+func (iq *iteratorQueue[K]) Pop() any {
+	lastIndex := len(*iq) - 1
+	top := (*iq)[lastIndex]
+	*iq = (*iq)[:lastIndex]
 	return top
 }
 
@@ -40,22 +40,25 @@ func MultIterator[I a.Integer, K Key, KL, CL any](
 	multiIteratorCacheSize, perTreeCacheSize int,
 ) <-chan K {
 	ch := make(chan K, multiIteratorCacheSize)
-	sq := &iteratorQueue[K]{}
+	iq := &iteratorQueue[K]{}
 	for _, t := range treeArr {
 		iter := t.Iterator(perTreeCacheSize)
-		*sq = append(*sq, queueItem[K]{iterator: iter, last: <-iter})
+		last, ok := <-iter
+		if ok {
+			*iq = append(*iq, queueItem[K]{iterator: iter, last: last})
+		}
 	}
 
-	heap.Init(sq)
+	heap.Init(iq)
 
 	go func () {
-		for sq.Len() > 0 {
-			itm := heap.Pop(sq).(queueItem[K])
+		for iq.Len() > 0 {
+			itm := heap.Pop(iq).(queueItem[K])
 			ch <- itm.last
 			next, ok := <-itm.iterator
 			if ok {
 				itm.last = next
-				heap.Push(sq, itm)
+				heap.Push(iq, itm)
 			}
 		}
 		close(ch)
