@@ -33,6 +33,7 @@ const tPath = "btree"
 const elementsToRead = 1_000_000
 
 const arrayIndexSize = 4
+const ipSize = 4
 
 const degree = 10
 const maxChildCount = 2 * degree
@@ -42,13 +43,28 @@ const minKeyCount = degree - 1
 
 var maxNodeCount = int(math.Ceil(float64(elementsToRead) / float64(minKeyCount)))
 var minNodeCount = int(math.Ceil(float64(elementsToRead) / float64(maxKeyCount)))
-var nodeSize = btree.NodeSize[uint32, ip.IP, KL, CL]()
+var nodeSize = btree.NodeSize[uint32, IP, KL, CL]()
 var virtualFileSize = maxNodeCount * nodeSize
 
-type KL    = [maxKeyCount * ip.IpSize]byte
+type KL    = [maxKeyCount * ipSize]byte
 type CL    = [maxChildCount * arrayIndexSize]byte
 type Meta  = btree.Metadata[uint32]
-type BTree = btree.BTree[uint32, ip.IP, KL, CL]
+type BTree = btree.BTree[uint32, IP, KL, CL]
+
+type IP uint32
+
+func (k IP) New() btree.Key  { return IP(0) }
+func (k IP) Copy() btree.Key { return k }
+func (k IP) Size() int       { return ipSize }
+func (k IP) Compare(k2 btree.Key) int {
+	k2Casted := k2.(IP)
+	if k < k2Casted {
+		return -1
+	} else if k > k2Casted {
+		return 1
+	}
+	return 0
+}
 
 var m sync.Mutex
 
@@ -70,12 +86,12 @@ func processStage(
 	m.Lock()
 	defer m.Unlock()
 	*metaArr = append(*metaArr, t.Meta())
-	*treeArr = append(*treeArr, btree.New[uint32, ip.IP, KL, CL](file.NewFromOSFile(tFile), t.Meta()))
+	*treeArr = append(*treeArr, btree.New[uint32, IP, KL, CL](file.NewFromOSFile(tFile), t.Meta()))
 
 	meta := *t.Meta()
 	meta.Count = 0
 	meta.Root = 0
-	return btree.New[uint32, ip.IP, KL, CL](t.File(), &meta)
+	return btree.New[uint32, IP, KL, CL](t.File(), &meta)
 }
 
 func main() {
@@ -93,7 +109,7 @@ func main() {
 		)
 	}, time.Second)
 
-	fmt.Println("nodeSize", btree.NodeSize[uint32, ip.IP, KL, CL]())
+	fmt.Println("nodeSize", btree.NodeSize[uint32, IP, KL, CL]())
 	fmt.Println("maxNodeCount", maxNodeCount)
 	fmt.Println("minNodeCount", minNodeCount)
 	fmt.Println("virtualFile", virtualFileSize)
@@ -109,12 +125,12 @@ func main() {
 	// 		ipParser := ip.Parser()
 	// 		virtualFile := file.New()
 	// 		virtualFile.Truncate(uint64(virtualFileSize))
-	// 		t := btree.New[uint32, ip.IP, KL, CL](virtualFile, &Meta{Degree: degree})
+	// 		t := btree.New[uint32, IP, KL, CL](virtualFile, &Meta{Degree: degree})
 	// 		tMetas[i] = []*Meta{}
 
 	// 		for itm := range iterator {
 	// 			atomic.AddUint64(&writeCount, 1)
-	// 			k := ip.IP(binary.BigEndian.Uint32(util.Must(ipParser.Parse(itm))))
+	// 			k := IP(binary.BigEndian.Uint32(util.Must(ipParser.Parse(itm))))
 	// 			t.Put(k)
 	// 			if t.Count() == elementsToRead {
 	// 				fmt.Println("STAGE0", i, "|", stage, "|", writeCount, "|", t.NodeCount(), "|", *t.Meta())
@@ -159,7 +175,7 @@ func main() {
 	for i, arr := range tMetas {
 		for j, meta := range arr {
 			fmt.Println(i, j, *meta)
-			treeArr = append(treeArr, btree.New[uint32, ip.IP, KL, CL](file.NewFromOSFile(
+			treeArr = append(treeArr, btree.New[uint32, IP, KL, CL](file.NewFromOSFile(
 				util.Must(os.OpenFile(
 					path.Join(pwd, dataFolder, dstFolder, tPath + fmt.Sprintf("_%d_%d", i, j)),
 					os.O_RDONLY,
@@ -171,7 +187,7 @@ func main() {
 
 	const multiIteratorCacheSize = 50_000
 	const perTreeCacheSize = 1_000_000
-	last := ip.IP(math.MaxUint32)
+	last := IP(math.MaxUint32)
 	for key := range btree.MultIterator(treeArr, multiIteratorCacheSize, perTreeCacheSize) {
 		readCount++
 		if last != key {

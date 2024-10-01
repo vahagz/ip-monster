@@ -54,12 +54,13 @@ func MultIterator[I a.Integer, K Key, KL, CL any](
 	go func () {
 		for iq.Len() > 0 {
 			itm := heap.Pop(iq).(queueItem[K])
-			ch <- itm.last
+			last := itm.last
 			next, ok := <-itm.iterator
 			if ok {
 				itm.last = next
 				heap.Push(iq, itm)
 			}
+			ch <- last
 		}
 		close(ch)
 	}()

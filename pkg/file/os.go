@@ -42,12 +42,12 @@ func (of *OSFile) Return(buf []byte) {
 func (of *OSFile) getBuf(n uint64) []byte {
 	p, ok := of.pools[n]
 	if !ok {
-		p = &sync.Pool{}
+		p = &sync.Pool{
+			New: func() any {
+				return make([]byte, n)
+			},
+		}
 		of.pools[n] = p
-	}
-
-	p.New = func() any {
-		return make([]byte, n)
 	}
 
 	return p.Get().([]byte)
