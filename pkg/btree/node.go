@@ -5,6 +5,7 @@ import (
 	"unsafe"
 
 	"ip_addr_counter/pkg/array"
+	"ip_addr_counter/pkg/util"
 )
 
 const (
@@ -13,10 +14,10 @@ const (
 )
 
 type Key interface {
+	util.Comparable
 	New() Key
 	Copy() Key
 	Size() int
-	Compare(k2 Key) int
 }
 
 func KeyComparator[K Key](k1, k2 K) int {

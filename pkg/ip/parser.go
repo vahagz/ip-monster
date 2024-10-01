@@ -1,8 +1,9 @@
 package ip
 
 import (
-	"ip_addr_counter/pkg/helpers"
 	"strconv"
+
+	"ip_addr_counter/pkg/util"
 )
 
 type parser struct {
@@ -25,7 +26,7 @@ func (p *parser) Parse(src []byte) ([]byte, error) {
 		if byt != '.' {
 			p.num = append(p.num, byt)
 		} else {
-			ipNumPart, err := strconv.ParseUint(helpers.BytesToString(p.num), 10, 8)
+			ipNumPart, err := strconv.ParseUint(util.BytesToString(p.num), 10, 8)
 			if err != nil {
 				return nil, err
 			}
@@ -35,7 +36,7 @@ func (p *parser) Parse(src []byte) ([]byte, error) {
 		}
 	}
 
-	ipNumPart, err := strconv.ParseUint(helpers.BytesToString(p.num), 10, 8)
+	ipNumPart, err := strconv.ParseUint(util.BytesToString(p.num), 10, 8)
 	if err != nil {
 		return nil, err
 	}

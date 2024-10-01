@@ -2,11 +2,13 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"math"
 	"os"
 	"path"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"ip_addr_counter/pkg/btree"
@@ -17,9 +19,9 @@ import (
 
 const dataFolder = "data"
 
-// const dstFolder = "dst2"; const ipPath = "ip_addresses.xml"
+const dstFolder = "dst2"; const ipPath = "ip_addresses.xml"
 // const dstFolder = "dst"; const ipPath = "addreses - Copy.txt"
-const dstFolder = "dst"; const ipPath = "addreses2 - Copy.txt"
+// const dstFolder = "dst"; const ipPath = "addreses2 - Copy.txt"
 
 const ipPageSize = 4 * 1024 * 1024 // 4MB
 const ipCacheSize = 1024
@@ -30,10 +32,13 @@ const tPath = "btree"
 
 // const elementsToRead = 53_687_090 // == ~1GB rbtree file
 // const elementsToRead = 55_924_053 // == ~1GB btree file if degree == 10
-const elementsToRead = 1_000_000
+const elementsToRead = 10_000_000
 
 const arrayIndexSize = 4
 const ipSize = 4
+
+const multiIteratorCacheSize = 50_000
+const perTreeCacheSize = 1_000_000
 
 const degree = 10
 const maxChildCount = 2 * degree
@@ -56,7 +61,7 @@ type IP uint32
 func (k IP) New() btree.Key  { return IP(0) }
 func (k IP) Copy() btree.Key { return k }
 func (k IP) Size() int       { return ipSize }
-func (k IP) Compare(k2 btree.Key) int {
+func (k IP) Compare(k2 util.Comparable) int {
 	k2Casted := k2.(IP)
 	if k < k2Casted {
 		return -1
@@ -113,38 +118,38 @@ func main() {
 	fmt.Println("maxNodeCount", maxNodeCount)
 	fmt.Println("minNodeCount", minNodeCount)
 	fmt.Println("virtualFile", virtualFileSize)
-	tMetas := make([][]*Meta, len(ipIterators))
+	tMetasPerIterator := make([][]*Meta, len(ipIterators))
 	treeArr := []*BTree{}
 	wg := sync.WaitGroup{}
+	wg.Add(len(ipIterators))
 
-	// for i, iterator := range ipIterators {
-	// 	wg.Add(1)
-	// 	go func (i int, iterator chan []byte)  {
-	// 		defer wg.Done()
-	// 		stage := 0
-	// 		ipParser := ip.Parser()
-	// 		virtualFile := file.New()
-	// 		virtualFile.Truncate(uint64(virtualFileSize))
-	// 		t := btree.New[uint32, IP, KL, CL](virtualFile, &Meta{Degree: degree})
-	// 		tMetas[i] = []*Meta{}
+	for i, iterator := range ipIterators {
+		go func (i int, iterator <-chan []byte) {
+			defer wg.Done()
+			stage := 0
+			ipParser := ip.Parser()
+			virtualFile := file.New()
+			virtualFile.Truncate(uint64(virtualFileSize))
+			t := btree.New[uint32, IP, KL, CL](virtualFile, &Meta{Degree: degree})
+			tMetasPerIterator[i] = []*Meta{}
 
-	// 		for itm := range iterator {
-	// 			atomic.AddUint64(&writeCount, 1)
-	// 			k := IP(binary.BigEndian.Uint32(util.Must(ipParser.Parse(itm))))
-	// 			t.Put(k)
-	// 			if t.Count() == elementsToRead {
-	// 				fmt.Println("STAGE0", i, "|", stage, "|", writeCount, "|", t.NodeCount(), "|", *t.Meta())
-	// 				t = processStage(pwd, i, &tMetas[i], &treeArr, t)
-	// 				stage++
-	// 			}
-	// 		}
+			for itm := range iterator {
+				atomic.AddUint64(&writeCount, 1)
+				k := IP(binary.BigEndian.Uint32(util.Must(ipParser.Parse(itm))))
+				t.Put(k)
+				if t.Count() == elementsToRead {
+					fmt.Println("STAGE0", i, "|", stage, "|", writeCount, "|", t.NodeCount(), "|", *t.Meta())
+					t = processStage(pwd, i, &tMetasPerIterator[i], &treeArr, t)
+					stage++
+				}
+			}
 
-	// 		if t.Count() != elementsToRead {
-	// 			fmt.Println("STAGE1", i, "|", stage, "|", writeCount, "|", t.NodeCount(), "|", *t.Meta())
-	// 			processStage(pwd, i, &tMetas[i], &treeArr, t)
-	// 		}
-	// 	}(i, iterator)
-	// }
+			if t.Count() != elementsToRead {
+				fmt.Println("STAGE1", i, "|", stage, "|", writeCount, "|", t.NodeCount(), "|", *t.Meta())
+				processStage(pwd, i, &tMetasPerIterator[i], &treeArr, t)
+			}
+		}(i, iterator)
+	}
 
 	wg.Wait()
 	stop()
@@ -159,36 +164,39 @@ func main() {
 		)
 	}, time.Second)
 
-	tMetas = [][]*btree.Metadata[uint32]{
-		{{10,34965,260}},
-		{{10,34426,235}},
-		{{10,34298,229}},
-		{{10,35105,3016}},
-		{{10,33963,2223}},
-		{{10,34965,300}},
-		{{10,34426,235}},
-		{{10,34298,229}},
-		{{10,35105,3002}},
-		{{10,33957,2223}},
+	// tMetasPerIterator = [][]*btree.Metadata[uint32]{
+	// 	{{10,10000000,352221}},
+	// 	{{10,10000000,335658}},
+	// 	{{10,10000000,366975}},
+	// 	{{10,10000000,343976}},
+	// 	{{10,10000000,360879}},
+	// 	{{10,10000000,356779}},
+	// 	{{10,10000000,327094}},
+	// 	{{10,10000000,346502}},
+	// 	{{10,10000000,351592}},
+	// 	{{10,10000000,357243}},
+	// }
+
+	// for i, arr := range tMetasPerIterator {
+	// 	for j, meta := range arr {
+	// 		fmt.Println(i, j, *meta)
+	// 		treeArr = append(treeArr, btree.New[uint32, IP, KL, CL](file.NewFromOSFile(
+	// 			util.Must(os.OpenFile(
+	// 				path.Join(pwd, dataFolder, dstFolder, tPath + fmt.Sprintf("_%d_%d", i, j)),
+	// 				os.O_RDONLY,
+	// 				os.ModePerm,
+	// 			)),
+	// 		), meta))
+	// 	}
+	// }
+
+	iterables := make([]util.Iterable[IP], len(treeArr))
+	for i := range treeArr {
+		iterables[i] = treeArr[i]
 	}
 
-	for i, arr := range tMetas {
-		for j, meta := range arr {
-			fmt.Println(i, j, *meta)
-			treeArr = append(treeArr, btree.New[uint32, IP, KL, CL](file.NewFromOSFile(
-				util.Must(os.OpenFile(
-					path.Join(pwd, dataFolder, dstFolder, tPath + fmt.Sprintf("_%d_%d", i, j)),
-					os.O_RDONLY,
-					os.ModePerm,
-				)),
-			), meta))
-		}
-	}
-
-	const multiIteratorCacheSize = 50_000
-	const perTreeCacheSize = 1_000_000
 	last := IP(math.MaxUint32)
-	for key := range btree.MultIterator(treeArr, multiIteratorCacheSize, perTreeCacheSize) {
+	for key := range util.MultIterator(iterables, multiIteratorCacheSize, perTreeCacheSize) {
 		readCount++
 		if last != key {
 			last = key

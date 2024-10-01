@@ -52,15 +52,3 @@ func (of *OSFile) getBuf(n uint64) []byte {
 
 	return p.Get().([]byte)
 }
-
-// func (of *OSFile) WriteTo(f *os.File) (n int64, err error) {
-// 	return f.ReadFrom(of.file)
-// }
-
-// func (of *OSFile) ReadAt(b []byte, off int64) (n int, err error) {
-// 	return of.file.ReadAt(b, off)
-// }
-
-// func (of *OSFile) WriteAt(b []byte, off int64) (n int, err error) {
-// 	return of.file.WriteAt(b, off)
-// }

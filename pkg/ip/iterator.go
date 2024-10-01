@@ -11,8 +11,8 @@ import (
 const MaxIpAddrSize = len("255.255.255.255\r\n")
 const MinIpAddrSize = len("0.0.0.0\r\n")
 
-func Iterator(file *os.File, pageSize, chanSize, count int) []chan []byte {
-	chArr := make([]chan []byte, count)
+func Iterator(file *os.File, pageSize, chanSize, count int) []<-chan []byte {
+	chArr := make([]<-chan []byte, count)
 	offsets := getOffsets(file, count)
 	fileSize := util.Must(file.Stat()).Size()
 
