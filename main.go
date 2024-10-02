@@ -18,8 +18,8 @@ import (
 
 const dataFolder = "data"
 
-// const dstFolder = "dst2"; const ipPath = "ip_addresses.xml"
-const dstFolder = "dst"; const ipPath = "addreses - Copy.txt"
+const dstFolder = "dst2"; const ipPath = "ip_addresses.xml"
+// const dstFolder = "dst"; const ipPath = "addreses - Copy.txt"
 // const dstFolder = "dst"; const ipPath = "addreses2 - Copy.txt"
 
 const ipPageSize = 4 * 1024 * 1024 // 4MB
@@ -110,7 +110,6 @@ func main() {
 	ipIterators := ip.Iterator(ipFile, ipPageSize, ipCacheSize, ipIteratorCount)
 	writeCount := uint64(0)
 	start := time.Now()
-	_ = start
 
 	stop := util.SetInterval(func(start, now time.Time) {
 		sec := now.Sub(start).Seconds()
@@ -175,7 +174,7 @@ func main() {
 
 	for i, treeArr := range treesPerStage {
 		for j, t := range treeArr {
-			fmt.Println(i, j, t.Count(), t.Min(), t.Max(), t.Meta())
+			fmt.Println(i, j, t.Min(), t.Max(), t.Meta())
 		}
 	}
 

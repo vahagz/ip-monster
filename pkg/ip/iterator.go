@@ -110,5 +110,5 @@ func getOffsets(file *os.File, count int) []int64 {
 }
 
 func getIndex(ip uint32, count int) int {
-	return int(float64(count - 1) * float64(ip) / float64(MaxIpAddrValue))
+	return int(float64(count) * float64(ip) / float64(MaxIpAddrValue + 1))
 }
