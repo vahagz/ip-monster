@@ -37,7 +37,7 @@ const arrayIndexSize = 4
 const ipSize = 4
 
 const multiIteratorCacheSize = 50_000
-const perTreeCacheSize = 10_000_000
+const perTreeCacheSize = 1_000_000
 
 const degree = 10
 const maxChildCount = 2 * degree
@@ -205,19 +205,21 @@ func main() {
 	// 	}
 	// }
 
-	// iterables := make([]util.Iterable[IP], len(treeArr))
-	// for i := range treeArr {
-	// 	iterables[i] = treeArr[i]
-	// }
+	for _, treeArr := range treesPerStage {
+		iterables := make([]util.Iterable[IP], len(treeArr))
+		for i := range treeArr {
+			iterables[i] = treeArr[i]
+		}
 
-	// last := IP(math.MaxUint32)
-	// for key := range util.MultIterator(iterables, multiIteratorCacheSize, perTreeCacheSize) {
-	// 	readCount++
-	// 	if last != key {
-	// 		last = key
-	// 		uniqCount++
-	// 	}
-	// }
+		last := IP(math.MaxUint32)
+		for key := range util.MultIterator(iterables, multiIteratorCacheSize, perTreeCacheSize) {
+			atomic.AddUint64(&readCount, 1)
+			if last != key {
+				last = key
+				atomic.AddUint64(&uniqCount, 1)
+			}
+		}
+	}
 
-	// fmt.Println(readCount, uniqCount, time.Since(start))
+	fmt.Println(readCount, uniqCount, time.Since(start))
 }
