@@ -20,8 +20,7 @@ import (
 const dataFolder = "data"
 
 // name of the file with ips.
-const ipFile = "ip_addresses.xml"
-// const ipFile = "addreses - Copy.txt"
+const ipFile = "ip_addresses.txt"
 
 // folder where intermediate btree files will be placed.
 const dstFolder = "dst";
@@ -68,6 +67,9 @@ const maxKeyCount = maxChildCount - 1
 // min count of keys for each btree node.
 const minKeyCount = btreeDegree - 1
 
+// count of in-memory nodes while scanning btree
+const treeIteratorCacheSize = 2 * maxChildCount
+
 // count of bytes for storing integers to internal on-disk array indexes.
 // 4 bytes are sufficient while maxNodeCount for each intermediate btree
 // fits in 4 byte unsigned integer. In the internal on-disk array contains
@@ -92,13 +94,13 @@ var nodeSize = btree.NodeSize[uint32, IP, KL, CL]()
 var virtualFileSize = maxNodeCount * nodeSize
 
 // type for specifying size of all keys in single node
-type KL    = [maxKeyCount * ipSize]byte
+type KL = [maxKeyCount * ipSize]byte
 
 // type for specifying size of all children pointers in single node
-type CL    = [maxChildCount * arrayIndexSize]byte
+type CL = [maxChildCount * arrayIndexSize]byte
 
 // btree metadata type alias to avoid type parameter passing
-type Meta  = btree.Metadata[uint32]
+type Meta = btree.Metadata[uint32]
 
 // btree type alias to avoid type parameter passing
 type BTree = btree.BTree[uint32, IP, KL, CL]
@@ -230,13 +232,13 @@ func main() {
 	}
 
 	for _, treeArr := range treesPerStage {
-		iterables := make([]util.Iterable[IP], len(treeArr))
+		iterators := make([]<-chan IP, len(treeArr))
 		for i := range treeArr {
-			iterables[i] = treeArr[i]
+			iterators[i] = treeArr[i].Iterator(treeIteratorCacheSize, perTreeCacheSize)
 		}
 
 		last := IP(math.MaxUint32)
-		for key := range util.MultIterator(iterables, multiIteratorCacheSize, perTreeCacheSize) {
+		for key := range util.MultIterator(iterators, multiIteratorCacheSize) {
 			atomic.AddUint64(&readCount, 1)
 			if last != key {
 				last = key

@@ -4,10 +4,6 @@ import (
 	"container/heap"
 )
 
-type Iterable[T any] interface {
-	Iterator(bufferSize int) <-chan T
-}
-
 type Comparable interface {
 	Compare(t Comparable) int
 }
@@ -43,13 +39,12 @@ func (iq *iteratorQueue[T]) Pop() any {
 }
 
 func MultIterator[T Comparable](
-	iteratorArr []Iterable[T],
-	multiIteratorCacheSize, perIteratorCacheSize int,
+	iteratorArr []<-chan T,
+	multiIteratorCacheSize int,
 ) <-chan T {
 	ch := make(chan T, multiIteratorCacheSize)
 	iq := &iteratorQueue[T]{}
-	for _, it := range iteratorArr {
-		iter := it.Iterator(perIteratorCacheSize)
+	for _, iter := range iteratorArr {
 		last, ok := <-iter
 		if ok {
 			*iq = append(*iq, queueItem[T]{iterator: iter, last: last})

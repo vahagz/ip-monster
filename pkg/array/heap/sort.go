@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"container/heap"
 	"fmt"
-	"ip_addr_counter/pkg/array"
 	"time"
+
+	"ip_addr_counter/pkg/array"
 )
 
 func HeapSort[T array.Integer](arr array.Array[T]) array.Array[T] {

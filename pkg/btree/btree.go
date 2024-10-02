@@ -7,8 +7,6 @@ import (
 	"ip_addr_counter/pkg/file"
 )
 
-const ScanCacheSize = 10
-
 func New[I a.Integer, K Key, KL, CL any](file file.Interface, meta *Metadata[I]) *BTree[I, K, KL, CL] {
 	arr := array.New[I, nodeData[KL, CL]](file, NodeSize[I, K, KL, CL](), meta.Count)
 	return &BTree[I, K, KL, CL]{
@@ -56,19 +54,19 @@ func (tree *BTree[I, K, KL, CL]) NodeCount() I {
 	return tree.arr.Len()
 }
 
-func (tree *BTree[I, K, KL, CL]) Scan(fn func(k K)) {
+func (tree *BTree[I, K, KL, CL]) Scan(cacheSize int, fn func(k K)) {
 	if tree.Count() == 0 {
 		return
 	}
 
-	c := cache.New[I, *node[I, K, KL, CL]](ScanCacheSize, nil)
+	c := cache.New[I, *node[I, K, KL, CL]](cacheSize, nil)
 	tree.traverse(c, tree.meta.Root, fn)
 }
 
-func (tree *BTree[I, K, KL, CL]) Iterator(cacheSize int) <-chan K {
-	ch := make(chan K, cacheSize)
+func (tree *BTree[I, K, KL, CL]) Iterator(scanCacheSize, iteratorCacheSize int) <-chan K {
+	ch := make(chan K, iteratorCacheSize)
 	go func () {
-		tree.Scan(func(k K) {
+		tree.Scan(scanCacheSize, func(k K) {
 			ch <- k
 		})
 		close(ch)

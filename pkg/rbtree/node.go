@@ -1,8 +1,9 @@
 package rbtree
 
 import (
-	"ip_addr_counter/pkg/array"
 	"unsafe"
+
+	"ip_addr_counter/pkg/array"
 )
 
 func newNode[I array.Integer, K Key](key K) *node[I, K] {
