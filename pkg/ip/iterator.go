@@ -60,6 +60,9 @@ func Iterator(file *os.File, pageSize, cacheSize, count int) []iter.Seq[uint32] 
 					n, err := readPage(file, pageSize, buf, ip, from)
 					from += int64(n)
 					if n == 0 && err == io.EOF {
+						if len(ip) > 0 {
+							send(chmArr, ipParser, ip)
+						}
 						break
 					} else if err != io.EOF && err != nil {
 						panic(err)
@@ -98,7 +101,9 @@ func readPage(file *os.File, pageSize int, buf *bytes.Buffer, halfReadIp []byte,
 }
 
 func send(chmArr []*util.ChanManager[uint32], parser *parser, ip []byte) {
-	ip = ip[:len(ip) - 1]
+	if ip[len(ip)-1] == '\n' {
+		ip = ip[:len(ip) - 1]
+	}
 	if ip[len(ip)-1] == '\r' {
 		ip = ip[:len(ip) - 1]
 	}

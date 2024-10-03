@@ -213,7 +213,7 @@ func main() {
 
 	wg.Wait() // waiting for ip file to be completely read
 	stop()
-	fmt.Printf("writeCount %d\n", writeCount)
+	fmt.Println("writeCount -", writeCount)
 	fmt.Println("============ READING PHASE ============")
 
 	// count of read ip addresses from array files
@@ -277,7 +277,7 @@ func main() {
 	}
 
 	fmt.Println()
-	fmt.Println("total read -", readCount)
+	fmt.Println("readCount -", readCount)
 	fmt.Println("uniq count -", uniqCount)
 	fmt.Println("duration -", time.Since(start))
 }
