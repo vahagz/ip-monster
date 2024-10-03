@@ -19,12 +19,12 @@ import (
 	"ip_addr_counter/pkg/util"
 )
 
-// folder where is located file with ip addresses.
+// folder where file with ip addresses. is located
 const dataFolder = "data"
 
 // name of the file with ips.
-const ipFile = "ip_addresses.txt"
-// const ipFile = "addreses - Copy.txt"
+// const ipFile = "ip_addresses.txt"
+const ipFile = "addreses - Copy.txt"
 
 // folder where intermediate files will be placed.
 const dstFolder = "dst";
@@ -43,22 +43,21 @@ const parallelArrayReaderCount = 10
 // count of elements to read for each iterator before processing to next stage.
 const elementsToRead = 10_000_000
 
-// minimal amount of data for read while reading ipFile.
+// min amount of data for read while reading ipFile.
 const ipReaderPageSize = 4 * 1024 * 1024 // 4MB
 
-// maximum count of ip addresses to store in memory while reading ipFile.
+// max count of ip addresses to store in memory while reading ipFile.
 const ipReaderCacheSize = 1024
 
-// degree of intermediate btree files.
-// More degree - more disk space saving but slower insertion.
+// degree of intermediate btrees.
+// More degree - more memory saving but slower insertion.
 const btreeDegree = 10
 
-// minimal amount of data for read while reading sorted arrays
+// count of ips for single read operation when iterating through array
 const arrayIteratorCacheSize = 1024 * 1024
 
-// minimum count of bytes required to store ipv4.
-// used to specify btree key size. IPs are stored as
-// btree keys without duplicates.
+// min count of bytes required to store ipv4.
+// used to specify btree key and array element size.
 const ipSize = int(unsafe.Sizeof(uint32(0)))
 
 // size of in-memory array file
@@ -84,11 +83,12 @@ func (k IP) Compare(k2 util.Comparable) int {
 	return 0
 }
 
+// returns helpers function for converting btree into array
 func stageProcessor(
 	pwd string,
 	i int,
 	arrList *[]Array,
-) func(t *BTree) (*BTree, *sync.WaitGroup) {
+) func(t *BTree) (*sync.WaitGroup) {
 	m := &sync.Mutex{}
 	arrayVFPool := &sync.Pool{New: func() any {
 		vf := file.New()
@@ -96,10 +96,8 @@ func stageProcessor(
 		return vf
 	}}
 
-	return func(t *BTree) (*BTree, *sync.WaitGroup) {
+	return func(t *BTree) (*sync.WaitGroup) {
 		wg := &sync.WaitGroup{}
-		newTree := btree.New[IP](btreeDegree)
-
 		wg.Add(1)
 		go func () {
 			defer wg.Done()
@@ -133,8 +131,8 @@ func stageProcessor(
 				t.Count(),
 			))
 		}()
-	
-		return newTree, wg
+
+		return wg
 	}
 }
 
@@ -192,7 +190,8 @@ func main() {
 				if current[i].Count() == elementsToRead {
 					fmt.Println("STAGE0", i, "|", stage, "|", writeCount)
 					// flushing btree data into on-disk array and creating new one
-					current[i], stageWG = processStage(current[i])
+					stageWG = processStage(current[i])
+					current[i] = btree.New[IP](btreeDegree)
 					stage++
 				}
 			}
@@ -207,26 +206,15 @@ func main() {
 			if current[i].Count() != elementsToRead && current[i].Count() > 0 {
 				fmt.Println("STAGE1", i, "|", stage, "|", writeCount)
 				// process rest data
-				_, wg := processStage(current[i])
-				wg.Wait()
+				processStage(current[i]).Wait()
 			}
 		}(i, ipIterator)
 	}
 
 	wg.Wait() // waiting for ip file to be completely read
 	stop()
-	fmt.Println("============ READING PHASE ============")
 	fmt.Printf("writeCount %d\n", writeCount)
-
-	// o := func(i, j int, length uint64) Array {
-	// 	return array.New[IP](file.NewFromOSFile(util.Must(os.OpenFile(
-	// 		path.Join(pwd, dataFolder, dstFolder, fmt.Sprintf("%s_%d_%d", prefix, i, j)),
-	// 		os.O_RDONLY,
-	// 		os.ModePerm,
-	// 	))), length)
-	// }
-	// arrListPerStage = [][]Array{
-	// }
+	fmt.Println("============ READING PHASE ============")
 
 	// count of read ip addresses from array files
 	readCount := uint64(0)
@@ -289,7 +277,7 @@ func main() {
 	}
 
 	fmt.Println()
-	fmt.Println("total read - ", readCount)
-	fmt.Println("uniq count - ", uniqCount)
-	fmt.Println(time.Since(start))
+	fmt.Println("total read -", readCount)
+	fmt.Println("uniq count -", uniqCount)
+	fmt.Println("duration -", time.Since(start))
 }
