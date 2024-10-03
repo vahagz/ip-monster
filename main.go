@@ -23,8 +23,7 @@ import (
 const dataFolder = "data"
 
 // name of the file with ips.
-// const ipFile = "ip_addresses.txt"
-const ipFile = "addreses - Copy.txt"
+const ipFile = "ip_addresses.txt"
 
 // folder where intermediate files will be placed.
 const dstFolder = "dst";
