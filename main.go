@@ -69,9 +69,6 @@ type Array = array.Array[IP, *IP]
 // btree key (aka ip). Implements btree.Key interface
 type IP uint32
 
-func (k IP) New() btree.Key  { return IP(0) }
-func (k IP) Copy() btree.Key { return k }
-func (k IP) Size() int       { return ipSize }
 func (k IP) Compare(k2 util.Comparable) int {
 	k2Casted := k2.(IP)
 	if k < k2Casted {
@@ -201,7 +198,7 @@ func main() {
 				stageWG.Wait()
 			}
 
-			// check if segment was completely read and some in-memory data left
+			// check if segment wasn't completely read and some in-memory data left
 			if current[i].Count() != elementsToRead && current[i].Count() > 0 {
 				fmt.Println("STAGE1", i, "|", stage, "|", writeCount)
 				// process rest data
@@ -239,7 +236,7 @@ func main() {
 	// this two nested cycles are needed to distribute load on disk.
 	// Actually just limits simultaneously running goroutines to parallelArrayReaderCount
 	// It creates no more than parallelArrayReaderCount goroutines each of which
-	// reads array lists created by index'th segments
+	// reads array lists created by index'th segment
 	for i := range int(math.Ceil(float64(len(arrListPerStage)) / float64(parallelArrayReaderCount))) {
 		wg := &sync.WaitGroup{}
 

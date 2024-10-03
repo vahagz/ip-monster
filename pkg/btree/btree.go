@@ -69,7 +69,7 @@ func (tree *BTree[K]) Max() K {
 
 func (tree *BTree[K]) traverse(n *node[K], fn func(k K) bool) bool {
 	for i := range n.count {
-    if !n.isLeaf {
+		if !n.isLeaf {
 			if !tree.traverse(n.children[i], fn) {
 				return false
 			}
@@ -77,7 +77,7 @@ func (tree *BTree[K]) traverse(n *node[K], fn func(k K) bool) bool {
 		if !fn(n.keys[i]) {
 			return false
 		}
-  }
+	}
 
 	if !n.isLeaf {
 		if !tree.traverse(n.children[n.count], fn) {

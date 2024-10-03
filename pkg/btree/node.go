@@ -13,9 +13,6 @@ const (
 
 type Key interface {
 	util.Comparable
-	New() Key
-	Copy() Key
-	Size() int
 }
 
 func KeyComparator[K Key](k1, k2 K) int {
