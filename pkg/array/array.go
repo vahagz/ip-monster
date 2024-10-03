@@ -37,6 +37,7 @@ type Array[T Integer] interface {
 	Truncate(size T)
 	Grow(size T)
 	File() file.Interface
+	Iterator(cacheSize int) <-chan []byte
 }
 
 func New[T Integer](file file.Interface, elemSize int, length uint64) Array[T] {
@@ -143,6 +144,17 @@ func (a *array[T]) Grow(size T) {
 
 func (a *array[T]) File() file.Interface {
 	return a.file
+}
+
+func (a *array[T]) Iterator(cacheSize int) <-chan []byte {
+	ch := make(chan []byte, cacheSize)
+	go func () {
+		for i := T(0); i < a.length; i++ {
+			ch <- a.Get(i)
+		}
+		close(ch)
+	}()
+	return ch
 }
 
 func (a *array[T]) checkBounds(index T) {

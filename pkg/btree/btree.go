@@ -88,7 +88,7 @@ func (tree *BTree[I, K, KL, CL]) Max() K {
 	curr := tree.meta.Root
 	currNode := tree.get(curr)
 	for !currNode.data.isLeaf {
-		curr = currNode.children[currNode.data.count-1]
+		curr = currNode.children[currNode.data.count]
 		currNode = tree.get(curr)
 	}
 	return currNode.keys[currNode.data.count-1]

@@ -27,6 +27,7 @@ type Array[I array.Integer, T Elem, PT ElemPointer[T]] interface {
 	Cap() I
 	Slice(from, to I) Array[I, T, PT]
 	File() file.Interface
+	Iterator(cacheSize int) <-chan T
 	Return(val PT)
 }
 
@@ -100,6 +101,18 @@ func (a *arrayGeneric[I, T, PT]) Truncate(size I) {
 
 func (a *arrayGeneric[I, T, PT]) File() file.Interface {
 	return a.arr.File()
+}
+
+
+func (a *arrayGeneric[I, T, PT]) Iterator(cacheSize int) <-chan T {
+	ch := make(chan T, cacheSize)
+	go func () {
+		for i := I(0); i < a.Len(); i++ {
+			ch <- *a.Get(i)
+		}
+		close(ch)
+	}()
+	return ch
 }
 
 func (a *arrayGeneric[I, T, PT]) Return(val PT) {
