@@ -101,7 +101,13 @@ func getOffsets(file *os.File, count int) []int64 {
 	
 	b := make([]byte, MaxIpAddrSize)
 	for i := 1; i < count; i++ {
-		util.Must(file.ReadAt(b, offsets[i - 1] + sizePerIterator))
+		n, err := file.ReadAt(b, offsets[i - 1] + sizePerIterator)
+		if err == io.EOF {
+			b = b[:n]
+		} else {
+			util.PanicIfErr(err)
+		}
+
 		ip := util.Must(bytes.NewBuffer(b).ReadBytes('\n'))
 		offsets[i] = offsets[i - 1] + sizePerIterator + int64(len(ip))
 	}

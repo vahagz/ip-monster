@@ -1,26 +1,20 @@
 package btree
 
 import (
-	a "ip_addr_counter/pkg/array"
-	array "ip_addr_counter/pkg/array/generic"
-	"ip_addr_counter/pkg/cache"
-	"ip_addr_counter/pkg/file"
+	"iter"
 )
 
-func New[I a.Integer, K Key, KL, CL any](file file.Interface, meta *Metadata[I]) *BTree[I, K, KL, CL] {
-	arr := array.New[I, nodeData[KL, CL]](file, NodeSize[I, K, KL, CL](), meta.Count)
-	return &BTree[I, K, KL, CL]{
-		arr:  arr,
-		meta: meta,
+func New[K Key](degree int) *BTree[K] {
+	return &BTree[K]{
+		meta: &Metadata[K]{Degree: degree},
 	}
 }
 
-type BTree[I a.Integer, K Key, KL, CL any] struct {
-	arr  array.Array[I, nodeData[KL, CL], *nodeData[KL, CL]]
-	meta *Metadata[I]
+type BTree[K Key] struct {
+	meta *Metadata[K]
 }
 
-func (tree *BTree[I, K, KL, CL]) Put(key K) (inserted bool) {
+func (tree *BTree[K]) Put(key K) (inserted bool) {
 	inserted = tree.insert(key)
 	if inserted {
 		tree.meta.Count++
@@ -28,226 +22,180 @@ func (tree *BTree[I, K, KL, CL]) Put(key K) (inserted bool) {
 	return inserted
 }
 
-func (tree *BTree[I, K, KL, CL]) Count() uint64 {
+func (tree *BTree[K]) Count() uint64 {
 	return tree.meta.Count
 }
 
-func (tree *BTree[I, K, KL, CL]) Meta() *Metadata[I] {
-	return tree.meta
-}
-
-func (tree *BTree[I, K, KL, CL]) File() file.Interface {
-	return tree.arr.File()
-}
-
-func (tree *BTree[I, K, KL, CL]) Height() int {
+func (tree *BTree[K]) Height() int {
 	height := 0
-	n := tree.get(tree.meta.Root)
-	for !n.data.isLeaf {
+	n := tree.meta.Root
+	for !n.isLeaf {
 		height++
-		n = tree.get(n.children[0])
+		n = n.children[0]
 	}
 	return height
 }
 
-func (tree *BTree[I, K, KL, CL]) NodeCount() I {
-	return tree.arr.Len()
-}
-
-func (tree *BTree[I, K, KL, CL]) Scan(cacheSize int, fn func(k K)) {
+func (tree *BTree[K]) Scan(cacheSize int, fn func(k K) bool) {
 	if tree.Count() == 0 {
 		return
 	}
-
-	c := cache.New[I, *node[I, K, KL, CL]](cacheSize, nil)
-	tree.traverse(c, tree.meta.Root, fn)
+	tree.traverse(tree.meta.Root, fn)
 }
 
-func (tree *BTree[I, K, KL, CL]) Iterator(scanCacheSize, iteratorCacheSize int) <-chan K {
-	ch := make(chan K, iteratorCacheSize)
-	go func () {
-		tree.Scan(scanCacheSize, func(k K) {
-			ch <- k
+func (tree *BTree[K]) Iterator(cacheSize int) iter.Seq[K] {
+	return func(yield func(K) bool) {
+		tree.Scan(cacheSize, func(k K) bool {
+			return yield(k)
 		})
-		close(ch)
-	}()
-	return ch
+	}
 }
 
-func (tree *BTree[I, K, KL, CL]) Min() K {
+func (tree *BTree[K]) Min() K {
 	curr := tree.meta.Root
-	currNode := tree.get(curr)
-	for !currNode.data.isLeaf {
-		curr = currNode.children[0]
-		currNode = tree.get(curr)
+	for !curr.isLeaf {
+		curr = curr.children[0]
 	}
-	return currNode.keys[0]
+	return curr.keys[0]
 }
 
-func (tree *BTree[I, K, KL, CL]) Max() K {
+func (tree *BTree[K]) Max() K {
 	curr := tree.meta.Root
-	currNode := tree.get(curr)
-	for !currNode.data.isLeaf {
-		curr = currNode.children[currNode.data.count]
-		currNode = tree.get(curr)
+	for !curr.isLeaf {
+		curr = curr.children[curr.count]
 	}
-	return currNode.keys[currNode.data.count-1]
+	return curr.keys[curr.count-1]
 }
 
-func (tree *BTree[I, K, KL, CL]) traverse(c *cache.Cache[I, *node[I, K, KL, CL]], n I, fn func(k K)) {
-	nNode, ok := c.Get(n)
-	if !ok {
-		nNode = tree.get(n)
-		c.Add(n, nNode)
-	}
-
-	for i := range nNode.data.count {
-    if !nNode.data.isLeaf {
-			tree.traverse(c, nNode.children[i], fn)
+func (tree *BTree[K]) traverse(n *node[K], fn func(k K) bool) bool {
+	for i := range n.count {
+    if !n.isLeaf {
+			if !tree.traverse(n.children[i], fn) {
+				return false
+			}
 		}
-		fn(nNode.keys[i])
+		if !fn(n.keys[i]) {
+			return false
+		}
   }
 
-	if !nNode.data.isLeaf {
-		tree.traverse(c, nNode.children[nNode.data.count], fn)
+	if !n.isLeaf {
+		if !tree.traverse(n.children[n.count], fn) {
+			return false
+		}
 	}
-
-	tree.arr.Return(nNode.data)
+	return true
 }
 
-func (tree *BTree[I, K, KL, CL]) get(i I) *node[I, K, KL, CL] {
-	return tree.newNodeWithData(tree.arr.Get(i))
+func (tree *BTree[K]) newNode(isLeaf bool) *node[K] {
+	return newNode[K](tree.meta.Degree, isLeaf)
 }
 
-func (tree *BTree[I, K, KL, CL]) push(n *node[I, K, KL, CL]) I {
-	return tree.arr.Push(n.data)
+func (tree *BTree[K]) isFull(n *node[K]) bool {
+	return n.count == 2*tree.meta.Degree-1
 }
 
-func (tree *BTree[I, K, KL, CL]) newNode(isLeaf bool) *node[I, K, KL, CL] {
-	return newNode[I, K, KL, CL](tree.meta.Degree, isLeaf)
-}
-
-func (tree *BTree[I, K, KL, CL]) newNodeWithData(data *nodeData[KL, CL]) *node[I, K, KL, CL] {
-	return newNodeWithData[I, K](data)
-}
-
-func (tree *BTree[I, K, KL, CL]) isFull(n *node[I, K, KL, CL]) bool {
-	return n.data.count == 2*tree.meta.Degree-1
-}
-
-func (tree *BTree[I, K, KL, CL]) search(key K) (
-	arrIndex I,
-	node *node[I, K, KL, CL],
+func (tree *BTree[K]) search(key K) (
+	node *node[K],
 	nodeIndex int,
 	found bool,
 ) {
-	arrIndex = tree.meta.Root
-	node = tree.get(arrIndex)
+	node = tree.meta.Root
 	nodeIndex, found = node.search(key)
-	for !node.data.isLeaf {
+	for !node.isLeaf {
 		if found {
 			return
 		}
-		arrIndex = node.children[nodeIndex]
-		node = tree.get(arrIndex)
+		node = node.children[nodeIndex]
 		nodeIndex, found = node.search(key)
 	}
 	return
 }
 
-func (tree *BTree[I, K, KL, CL]) insert(key K) bool {
+func (tree *BTree[K]) insert(key K) bool {
 	if tree.Count() == 0 {
-		root := newNode[I, K, KL, CL](tree.meta.Degree, true)
+		root := newNode[K](tree.meta.Degree, true)
 		root.keys[0] = key
-		root.data.count = 1
-		tree.push(root)
+		root.count = 1
+		tree.meta.Root = root
 		return true
 	}
 
-	arrIndex, node, _, found := tree.search(key)
+	node, _, found := tree.search(key)
 	if found {
 		return false
 	} else if !tree.isFull(node) {
-		return tree.insertNonFull(arrIndex, key)
+		return tree.insertNonFull(node, key)
 	}
 
-	rootNode := tree.get(tree.meta.Root)
-	if !tree.isFull(rootNode) {
+	if !tree.isFull(tree.meta.Root) {
 		return tree.insertNonFull(tree.meta.Root, key)
 	}
 
-	sNode := newNode[I, K, KL, CL](tree.meta.Degree, false)
-	sNode.children[0] = tree.meta.Root
-	s := tree.push(sNode)
-	sNode = tree.get(s)
+	s := newNode[K](tree.meta.Degree, false)
+	s.children[0] = tree.meta.Root
 	tree.splitChild(s, 0, tree.meta.Root)
 
 	i := 0
-	if sNode.keys[0].Compare(key) == -1 {
+	if s.keys[0].Compare(key) == -1 {
 		i++
 	}
 
-	inserted := tree.insertNonFull(sNode.children[i], key)
+	inserted := tree.insertNonFull(s.children[i], key)
 	tree.meta.Root = s
 	return inserted
 }
 
-func (tree *BTree[I, K, KL, CL]) insertNonFull(n I, key K) bool {
-	nNode := tree.get(n)
-	i, found := nNode.search(key)
+func (tree *BTree[K]) insertNonFull(n *node[K], key K) bool {
+	i, found := n.search(key)
 	if found {
 		return false
 	}
 
-	if nNode.data.isLeaf {
-		i := nNode.data.count - 1
-		for i >= 0 && nNode.keys[i].Compare(key) == 1 {
-			nNode.keys[i+1] = nNode.keys[i]
+	if n.isLeaf {
+		i := n.count - 1
+		for i >= 0 && n.keys[i].Compare(key) == 1 {
+			n.keys[i+1] = n.keys[i]
 			i--
 		}
 
-		nNode.keys[i+1] = key
-		nNode.data.count++
+		n.keys[i+1] = key
+		n.count++
 		return true
 	}
 
-	c := nNode.children[i]
-	cNode := tree.get(c)
-	_, found = cNode.search(key)
+	c := n.children[i]
+	_, found = c.search(key)
 	if found {
 		return false
 	}
 
-	if tree.isFull(cNode) {
+	if tree.isFull(c) {
 		tree.splitChild(n, i, c)
-		nNode = tree.get(n)
-		c = nNode.children[i]
-		if nNode.keys[i].Compare(key) == -1 {
-			c = nNode.children[i+1]
+		c = n.children[i]
+		if n.keys[i].Compare(key) == -1 {
+			c = n.children[i+1]
 		}
 	}
 	return tree.insertNonFull(c, key)
 }
 
-func (tree *BTree[I, K, KL, CL]) splitChild(n I, i int, y I) {
-	nNode := tree.get(n)
-	yNode := tree.get(y)
-	zNode := tree.newNode(yNode.data.isLeaf)
-	zNode.data.count = tree.meta.Degree - 1
+func (tree *BTree[K]) splitChild(n *node[K], i int, y *node[K]) {
+	z := tree.newNode(y.isLeaf)
+	z.count = tree.meta.Degree - 1
 
-	copy(zNode.keys, yNode.keys[tree.meta.Degree:])
-	if !yNode.data.isLeaf {
-		copy(zNode.children, yNode.children[tree.meta.Degree:])
+	copy(z.keys, y.keys[tree.meta.Degree:])
+	if !y.isLeaf {
+		copy(z.children, y.children[tree.meta.Degree:])
 	}
 
-	yNode.data.count = tree.meta.Degree - 1
-	copy(nNode.children[i+2:], nNode.children[i+1:nNode.data.count+1])
+	y.count = tree.meta.Degree - 1
+	copy(n.children[i+2:], n.children[i+1:n.count+1])
 
-	z := tree.push(zNode)
-	nNode.children[i+1] = z
+	n.children[i+1] = z
 
-	copy(nNode.keys[i+1:], nNode.keys[i:nNode.data.count])
+	copy(n.keys[i+1:], n.keys[i:n.count])
 
-	nNode.keys[i] = yNode.keys[tree.meta.Degree-1]
-	nNode.data.count++
+	n.keys[i] = y.keys[tree.meta.Degree-1]
+	n.count++
 }

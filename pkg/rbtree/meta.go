@@ -1,10 +1,12 @@
 package rbtree
 
-import (
-	"ip_addr_counter/pkg/array"
-)
+type Integer interface {
+	~int   | ~uint   |
+	~uint8 | ~uint16 | ~uint32 | ~uint64 |
+	~int8  | ~int16  | ~int32  | ~int64
+}
 
-type Metadata[T array.Integer] struct {
+type Metadata[T Integer] struct {
 	NodeKeySize uint16
 	Root        T
 	Null        T

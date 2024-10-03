@@ -7,31 +7,31 @@ import (
 	"ip_addr_counter/pkg/array"
 )
 
-type heapArray[T array.Integer] struct {
-	arr array.Array[T]
+type heapArray struct {
+	arr array.Array
 }
 
-func Heap[T array.Integer](arr array.Array[T]) heap.Interface {
-	return &heapArray[T]{arr}
+func Heap(arr array.Array) heap.Interface {
+	return &heapArray{arr}
 }
 
-func (h *heapArray[T]) Push(x any) {
+func (h *heapArray) Push(x any) {
 	h.arr.Push(x.([]byte))
 }
 
-func (h *heapArray[T]) Pop() any {
+func (h *heapArray) Pop() any {
 	return h.arr.PopCopy()
 }
 
-func (h *heapArray[T]) Len() int {
+func (h *heapArray) Len() int {
 	return int(h.arr.Len())
 }
 
-func (h *heapArray[T]) Less(i, j int) bool {
-	itm1, itm2 := h.arr.Get(T(i)), h.arr.Get(T(j))
+func (h *heapArray) Less(i, j int) bool {
+	itm1, itm2 := h.arr.Get(uint64(i)), h.arr.Get(uint64(j))
 	return bytes.Compare(itm2, itm1) == -1
 }
 
-func (h *heapArray[T]) Swap(i, j int) {
-	h.arr.Swap(T(i), T(j))
+func (h *heapArray) Swap(i, j int) {
+	h.arr.Swap(uint64(i), uint64(j))
 }

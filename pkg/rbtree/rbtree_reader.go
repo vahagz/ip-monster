@@ -3,21 +3,19 @@ package rbtree
 import (
 	"math"
 
-	a "ip_addr_counter/pkg/array"
 	array "ip_addr_counter/pkg/array/generic"
 	"ip_addr_counter/pkg/file"
 	"ip_addr_counter/pkg/stack"
 )
 
-func NewReader[I a.Integer, K Key](file file.Interface, meta *Metadata[I]) *RBTreeReader[I, K] {
-	var n node[I, K]
-	var arr array.Array[I, node[I, K], *node[I, K]]
+func NewReader[I Integer, K Key](file file.Interface, meta *Metadata[I]) *RBTreeReader[I, K] {
+	var arr array.Array[node[I, K], *node[I, K]]
 
 	if meta == nil {
-		arr = array.New[I, node[I, K]](file, n.size(), 0)
+		arr = array.New[node[I, K]](file, 0)
 		nullNode := emptyNode[I, K]()
 		nullNode.setBlack()
-		nullPtr := arr.Push(nullNode)
+		nullPtr := I(arr.Push(nullNode))
 		var k K
 		meta = &Metadata[I]{
 			NodeKeySize: uint16(k.Size()),
@@ -26,7 +24,7 @@ func NewReader[I a.Integer, K Key](file file.Interface, meta *Metadata[I]) *RBTr
 			Count:       0,
 		}
 	} else {
-		arr = array.New[I, node[I, K]](file, n.size(), meta.Count + 1) // +1 for null node
+		arr = array.New[node[I, K]](file, meta.Count + 1) // +1 for null node
 	}
 
 	tree := &RBTreeReader[I, K]{
@@ -37,9 +35,13 @@ func NewReader[I a.Integer, K Key](file file.Interface, meta *Metadata[I]) *RBTr
 	return tree
 }
 
-type RBTreeReader[I a.Integer, K Key] struct {
-	arr  array.Array[I, node[I, K], *node[I, K]]
+type RBTreeReader[I Integer, K Key] struct {
+	arr  array.Array[node[I, K], *node[I, K]]
 	meta *Metadata[I]
+}
+
+func (tree *RBTreeReader[I, K]) Get(index I) *node[I, K] {
+	return tree.arr.Get(uint64(index))
 }
 
 func (tree *RBTreeReader[I, K]) Meta() *Metadata[I] {
@@ -65,23 +67,23 @@ func (tree *RBTreeReader[I, K]) Scan(key *K, scanFn func(key K) (stop bool, err 
 	for curr != 0 && curr != tree.meta.Null || s.Size() > 0 {
 		for curr != 0 && curr != tree.meta.Null {
 			s.Push(curr)
-			if tree.arr.Get(curr).left == tree.meta.Null {
+			if tree.Get(curr).left == tree.meta.Null {
 				break
 			}
 
-			curr = tree.arr.Get(curr).left
+			curr = tree.Get(curr).left
 		}
 
 		curr = s.Pop()
-		stop, err := scanFn(tree.arr.Get(curr).key)
+		stop, err := scanFn(tree.Get(curr).key)
 		if stop || err != nil {
 			return err
 		}
 
-		if tree.arr.Get(curr).right == tree.meta.Null {
+		if tree.Get(curr).right == tree.meta.Null {
 			curr = 0
 		} else {
-			curr = tree.arr.Get(curr).right
+			curr = tree.Get(curr).right
 		}
 	}
 
@@ -94,20 +96,20 @@ func (tree *RBTreeReader[I, K]) Count() int {
 
 func (tree *RBTreeReader[I, K]) Min() K {
 	curr := tree.meta.Root
-	currNode := tree.arr.Get(curr)
+	currNode := tree.Get(curr)
 	for currNode.left != tree.meta.Null {
-		curr = tree.arr.Get(curr).left
-		currNode = tree.arr.Get(curr)
+		curr = tree.Get(curr).left
+		currNode = tree.Get(curr)
 	}
 	return currNode.key
 }
 
 func (tree *RBTreeReader[I, K]) Max() K {
 	curr := tree.meta.Root
-	currNode := tree.arr.Get(curr)
+	currNode := tree.Get(curr)
 	for currNode.right != tree.meta.Null {
-		curr = tree.arr.Get(curr).right
-		currNode = tree.arr.Get(curr)
+		curr = tree.Get(curr).right
+		currNode = tree.Get(curr)
 	}
 	return currNode.key
 }
@@ -120,12 +122,12 @@ func (tree *RBTreeReader[I, K]) searchIndex(key K) (I, bool) {
 	lastGreaterPtr := tree.meta.Null
 	index := tree.meta.Root
 	for index != tree.meta.Null {
-		switch tree.arr.Get(index).key.Compare(key) {
+		switch tree.Get(index).key.Compare(key) {
 		case -1:
-			index = tree.arr.Get(index).right
+			index = tree.Get(index).right
 		case 1:
 			lastGreaterPtr = index
-			index = tree.arr.Get(index).left
+			index = tree.Get(index).left
 		default:
 			return index, true
 		}

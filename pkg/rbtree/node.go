@@ -2,18 +2,16 @@ package rbtree
 
 import (
 	"unsafe"
-
-	"ip_addr_counter/pkg/array"
 )
 
-func newNode[I array.Integer, K Key](key K) *node[I, K] {
+func newNode[I Integer, K Key](key K) *node[I, K] {
 	return &node[I, K]{
 		flags: FV_COLOR_RED,
 		key:   key.Copy().(K),
 	}
 }
 
-func emptyNode[I array.Integer, K Key]() *node[I, K] {
+func emptyNode[I Integer, K Key]() *node[I, K] {
 	var k K
 	return &node[I, K]{
 		key: k.New().(K),
@@ -33,7 +31,7 @@ const (
 	FT_COLOR flagType = 0
 )
 
-type node[I array.Integer, K Key] struct {
+type node[I Integer, K Key] struct {
 	left   I
 	right  I
 	parent I
@@ -41,7 +39,7 @@ type node[I array.Integer, K Key] struct {
 	key    K
 }
 
-func NodeSize[I array.Integer, K Key]() int {
+func NodeSize[I Integer, K Key]() int {
 	var n node[I, K]
 	return n.size()
 }

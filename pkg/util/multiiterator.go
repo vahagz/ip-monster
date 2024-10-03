@@ -2,6 +2,7 @@ package util
 
 import (
 	"container/heap"
+	"iter"
 )
 
 type Comparable interface {
@@ -9,8 +10,8 @@ type Comparable interface {
 }
 
 type queueItem[T Comparable] struct {
-	iterator <-chan T
-	last     T
+	next func() (T, bool)
+	last T
 }
 
 type iteratorQueue[T Comparable] []queueItem[T]
@@ -38,34 +39,31 @@ func (iq *iteratorQueue[T]) Pop() any {
 	return top
 }
 
-func MultIterator[T Comparable](
-	iteratorArr []<-chan T,
-	multiIteratorCacheSize int,
-) <-chan T {
-	ch := make(chan T, multiIteratorCacheSize)
+func MultIterator[T Comparable](iteratorArr []iter.Seq[T]) iter.Seq[T] {
 	iq := &iteratorQueue[T]{}
-	for _, iter := range iteratorArr {
-		last, ok := <-iter
+	for _, it := range iteratorArr {
+		next, _ := iter.Pull(it)
+		last, ok := next()
 		if ok {
-			*iq = append(*iq, queueItem[T]{iterator: iter, last: last})
+			*iq = append(*iq, queueItem[T]{next: next, last: last})
 		}
 	}
 
 	heap.Init(iq)
 
-	go func () {
+	return func(yield func(T) bool) {
 		for iq.Len() > 0 {
 			itm := heap.Pop(iq).(queueItem[T])
 			last := itm.last
-			next, ok := <-itm.iterator
+			next, ok := itm.next()
 			if ok {
 				itm.last = next
 				heap.Push(iq, itm)
 			}
-			ch <- last
-		}
-		close(ch)
-	}()
 
-	return ch
+			if !yield(last) {
+				break
+			}
+		}
+	}
 }

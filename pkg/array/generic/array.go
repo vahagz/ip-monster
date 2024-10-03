@@ -1,6 +1,7 @@
 package array
 
 import (
+	"iter"
 	"unsafe"
 
 	"ip_addr_counter/pkg/array"
@@ -15,106 +16,100 @@ type ElemPointer[T any] interface {
 	*T
 }
 
-type Array[I array.Integer, T Elem, PT ElemPointer[T]] interface {
-	Get(index I) PT
+type Array[T Elem, PT ElemPointer[T]] interface {
+	Get(index uint64) PT
 	Last() PT
-	Set(index I, val PT)
-	Push(val PT) I
+	Set(index uint64, val PT)
+	Push(val PT) uint64
 	Popn()
 	Pop() PT
-	Swap(i, j I)
-	Len() I
-	Cap() I
-	Slice(from, to I) Array[I, T, PT]
+	Swap(i, j uint64)
+	Len() uint64
+	Cap() uint64
+	Slice(from, to uint64) Array[T, PT]
 	File() file.Interface
-	Iterator(cacheSize int) <-chan T
+	Iterator(cacheSize int) iter.Seq[T]
 	Return(val PT)
 }
 
-type arrayGeneric[I array.Integer, T Elem, PT ElemPointer[T]] struct {
-	arr array.Array[I]
-	// _items []T // for debugging
+type arrayGeneric[T Elem, PT ElemPointer[T]] struct {
+	arr array.Array
 }
 
-func New[I array.Integer, T Elem, PT ElemPointer[T]](
-	file file.Interface,
-	elemSize int,
-	length uint64,
-) Array[I, T, PT] {
-	return &arrayGeneric[I, T, PT]{
-		arr: array.New[I](file, elemSize, length),
-		// _items: unsafe.Slice((PT)(unsafe.Pointer(&file.Slice(0, 1)[0])), file.Size() / uint64(elemSize)),  // for debugging
+func New[T Elem, PT ElemPointer[T]](file file.Interface, length uint64) Array[T, PT] {
+	var t T
+	return &arrayGeneric[T, PT]{
+		arr: array.New(file, uint64(unsafe.Sizeof(t)), length),
 	}
 }
 
-func (a *arrayGeneric[I, T, PT]) Get(index I) PT {
-	return (*T)(unsafe.Pointer(&a.arr.Get(index)[0]))
+func (a *arrayGeneric[T, PT]) Get(index uint64) PT {
+	return util.BytesTo[*T](a.arr.Get(index))
 }
 
-func (a *arrayGeneric[I, T, PT]) Last() PT {
+func (a *arrayGeneric[T, PT]) Last() PT {
 	return a.Get(a.Len() - 1)
 }
 
-func (a *arrayGeneric[I, T, PT]) Set(index I, val PT) {
+func (a *arrayGeneric[T, PT]) Set(index uint64, val PT) {
 	*a.Get(index) = *val
 }
 
-func (a *arrayGeneric[I, T, PT]) Push(val PT) I {
+func (a *arrayGeneric[T, PT]) Push(val PT) uint64 {
 	a.arr.Grow(a.arr.Len() + 1)
 	a.Set(a.arr.Len() - 1, val)
 	return a.arr.Len() - 1
 }
 
-func (a *arrayGeneric[I, T, PT]) Popn() {
+func (a *arrayGeneric[T, PT]) Popn() {
 	index := a.Len() - 1
-	*a = *a.Slice(0, index).(*arrayGeneric[I, T, PT])
+	*a = *a.Slice(0, index).(*arrayGeneric[T, PT])
 }
 
-func (a *arrayGeneric[I, T, PT]) Pop() PT {
+func (a *arrayGeneric[T, PT]) Pop() PT {
 	index := a.Len() - 1
 	elem := a.Get(index)
-	*a = *a.Slice(0, index).(*arrayGeneric[I, T, PT])
+	*a = *a.Slice(0, index).(*arrayGeneric[T, PT])
 	return elem
 }
 
-func (a *arrayGeneric[I, T, PT]) Swap(i, j I) {
+func (a *arrayGeneric[T, PT]) Swap(i, j uint64) {
 	a.arr.Swap(i, j)
 }
 
-func (a *arrayGeneric[I, T, PT]) Len() I {
+func (a *arrayGeneric[T, PT]) Len() uint64 {
 	return a.arr.Len()
 }
 
-func (a *arrayGeneric[I, T, PT]) Cap() I {
+func (a *arrayGeneric[T, PT]) Cap() uint64 {
 	return a.arr.Cap()
 }
 
-func (a *arrayGeneric[I, T, PT]) Slice(from, to I) Array[I, T, PT] {
-	return &arrayGeneric[I, T, PT]{
+func (a *arrayGeneric[T, PT]) Slice(from, to uint64) Array[T, PT] {
+	return &arrayGeneric[T, PT]{
 		arr: a.arr.Slice(from, to),
 	}
 }
 
-func (a *arrayGeneric[I, T, PT]) Truncate(size I) {
+func (a *arrayGeneric[T, PT]) Truncate(size uint64) {
 	a.arr.Truncate(size)
 }
 
-func (a *arrayGeneric[I, T, PT]) File() file.Interface {
+func (a *arrayGeneric[T, PT]) File() file.Interface {
 	return a.arr.File()
 }
 
 
-func (a *arrayGeneric[I, T, PT]) Iterator(cacheSize int) <-chan T {
-	ch := make(chan T, cacheSize)
-	go func () {
-		for i := I(0); i < a.Len(); i++ {
-			ch <- *a.Get(i)
+func (a *arrayGeneric[T, PT]) Iterator(cacheSize int) iter.Seq[T] {
+	return func(yield func(T) bool) {
+		for itm := range a.arr.Iterator(cacheSize) {
+			if !yield(*util.BytesTo[*T](itm)) {
+				break
+			}
 		}
-		close(ch)
-	}()
-	return ch
+	}
 }
 
-func (a *arrayGeneric[I, T, PT]) Return(val PT) {
+func (a *arrayGeneric[T, PT]) Return(val PT) {
 	a.arr.File().Return(util.ToBytes(val))
 }

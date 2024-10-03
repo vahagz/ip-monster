@@ -9,7 +9,7 @@ import (
 	"ip_addr_counter/pkg/array"
 )
 
-func HeapSort[T array.Integer](arr array.Array[T]) array.Array[T] {
+func HeapSort(arr array.Array) array.Array {
 	initialArr := arr
 	lastIndex := initialArr.Len() - 1
 

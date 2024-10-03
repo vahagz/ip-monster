@@ -3,113 +3,109 @@ package array
 import (
 	"bytes"
 	"fmt"
+	"iter"
+	"math"
 
 	"ip_addr_counter/pkg/file"
 )
 
-type Integer interface {
-	~int   | ~uint   |
-	~uint8 | ~uint16 | ~uint32 | ~uint64 |
-	~int8  | ~int16  | ~int32  | ~int64
-}
-
-type array[T Integer] struct {
+type array struct {
 	file      file.Interface
 	fileSize  uint64
-	elemSize  T
-	length    T
-	offset    T
+	elemSize  uint64
+	length    uint64
+	offset    uint64
 }
 
-type Array[T Integer] interface {
-	Get(index T) []byte
-	GetCopy(index T) []byte
+type Array interface {
+	Get(index uint64) []byte
+	GetCopy(index uint64) []byte
 	Last() []byte
-	Set(index T, val []byte)
-	Push(val []byte) T
+	Set(index uint64, val []byte)
+	Push(val []byte) uint64
 	Popn()
 	Pop() []byte
 	PopCopy() []byte
-	Swap(i, j T)
-	Len() T
-	Cap() T
-	Slice(from, to T) Array[T]
-	Truncate(size T)
-	Grow(size T)
+	Swap(i, j uint64)
+	Len() uint64
+	Cap() uint64
+	Slice(from, to uint64) Array
+	Truncate(size uint64)
+	Grow(size uint64)
 	File() file.Interface
-	Iterator(cacheSize int) <-chan []byte
+	Iterator(cacheSize int) iter.Seq[[]byte]
 }
 
-func New[T Integer](file file.Interface, elemSize int, length uint64) Array[T] {
-	return &array[T]{
+func New(file file.Interface, elemSize, length uint64) Array {
+	return &array{
 		file:     file,
 		fileSize: file.Size(),
-		elemSize: T(elemSize),
-		length:   T(length),
+		elemSize: elemSize,
+		length:   length,
 		offset:   0,
 	}
 }
 
-func (a *array[T]) Get(index T) []byte {
+func (a *array) Get(index uint64) []byte {
 	a.checkBounds(index)
 	index += a.offset
 	return a.file.Slice(a.indexToOffset(index), uint64(a.elemSize))
 }
 
-func (a *array[T]) GetCopy(index T) []byte {
+func (a *array) GetCopy(index uint64) []byte {
 	return bytes.Clone(a.Get(index))
 }
 
-func (a *array[T]) Last() []byte {
+func (a *array) Last() []byte {
 	return a.Get(a.length - 1)
 }
 
-func (a *array[T]) Set(index T, val []byte) {
+func (a *array) Set(index uint64, val []byte) {
 	a.checkBounds(index)
 	index += a.offset
 	copy(a.file.Slice(a.indexToOffset(index), uint64(a.elemSize)), val)
 }
 
-func (a *array[T]) Push(val []byte) T {
+func (a *array) Push(val []byte) uint64 {
 	a.Grow(a.length + 1)
 	a.Set(a.length - 1, val)
 	return a.length - 1
 }
 
-func (a *array[T]) Popn() {
-	*a = *a.Slice(0, a.length - 1).(*array[T])
+func (a *array) Popn() {
+	*a = *a.Slice(0, a.length - 1).(*array)
 }
 
-func (a *array[T]) Pop() []byte {
+func (a *array) Pop() []byte {
 	val := a.Get(a.length - 1)
-	*a = *a.Slice(0, a.length - 1).(*array[T])
+	*a = *a.Slice(0, a.length - 1).(*array)
 	return val
 }
 
-func (a *array[T]) PopCopy() []byte {
+func (a *array) PopCopy() []byte {
 	return bytes.Clone(a.Pop())
 }
 
-func (a *array[T]) Swap(i, j T) {
+func (a *array) Swap(i, j uint64) {
 	itm1, itm2 := a.GetCopy(i), a.GetCopy(j)
 	a.Set(i, itm2)
 	a.Set(j, itm1)
 }
 
-func (a *array[T]) Len() T {
+func (a *array) Len() uint64 {
 	return a.length
 }
 
-func (a *array[T]) Cap() T {
-	return T(a.fileSize / uint64(a.elemSize - a.offset))
+func (a *array) Cap() uint64 {
+	return a.fileSize / (a.elemSize - a.offset)
 }
 
-func (a *array[T]) Slice(from, to T) Array[T] {
+func (a *array) Slice(from, to uint64) Array {
 	if from < 0 || from > to || to < 0 || to > a.Cap() {
 		panic(fmt.Errorf("out of bounds: [%d:%d], len:%d, cap:%d", from, to, a.length, a.Cap()))
 	}
 
-	return &array[T]{
+	return &array{
 		file:     a.file,
 		fileSize: a.fileSize,
 		elemSize: a.elemSize,
@@ -118,7 +114,7 @@ func (a *array[T]) Slice(from, to T) Array[T] {
 	}
 }
 
-func (a *array[T]) Truncate(size T) {
+func (a *array) Truncate(size uint64) {
 	a.fileSize = uint64(size) * uint64(a.elemSize)
 	err := a.file.Truncate(a.fileSize)
 	if err != nil {
@@ -131,7 +127,7 @@ func (a *array[T]) Truncate(size T) {
 	}
 }
 
-func (a *array[T]) Grow(size T) {
+func (a *array) Grow(size uint64) {
 	if size <= a.length {
 		return
 	}
@@ -142,27 +138,43 @@ func (a *array[T]) Grow(size T) {
 	a.length = size
 }
 
-func (a *array[T]) File() file.Interface {
+func (a *array) File() file.Interface {
 	return a.file
 }
 
-func (a *array[T]) Iterator(cacheSize int) <-chan []byte {
-	ch := make(chan []byte, cacheSize)
-	go func () {
-		for i := T(0); i < a.length; i++ {
-			ch <- a.Get(i)
+func (a *array) Iterator(cacheSize int) iter.Seq[[]byte] {
+	return func(yield func([]byte) bool) {
+		pageCount := uint64(math.Ceil(float64(a.length) / float64(cacheSize)))
+
+		for pageIndex := range pageCount {
+			elemsCount := uint64(cacheSize)
+			if pageIndex == pageCount - 1 {
+				elemsCount = a.length % uint64(cacheSize)
+				if elemsCount == 0 {
+					elemsCount = uint64(cacheSize)
+				}
+			}
+
+			pageSize := a.elemSize * uint64(cacheSize)
+			page := a.file.Slice(pageIndex * pageSize, pageSize)
+
+			from := uint64(0)
+			for range elemsCount {
+				if !yield(page[from:from + a.elemSize]) {
+					break
+				}
+				from += a.elemSize
+			}
 		}
-		close(ch)
-	}()
-	return ch
+	}
 }
 
-func (a *array[T]) checkBounds(index T) {
+func (a *array) checkBounds(index uint64) {
 	if index >= a.length {
 		panic(fmt.Errorf("out of bounds: %d", index))
 	}
 }
 
-func (a *array[T]) indexToOffset(index T) uint64 {
-	return uint64(index) * uint64(a.elemSize)
+func (a *array) indexToOffset(index uint64) uint64 {
+	return index * a.elemSize
 }
