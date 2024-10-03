@@ -39,7 +39,7 @@ func (iq *iteratorQueue[T]) Pop() any {
 	return top
 }
 
-func MultIterator[T Comparable](iteratorArr []iter.Seq[T]) iter.Seq[T] {
+func MultiIterator[T Comparable](iteratorArr []iter.Seq[T]) iter.Seq[T] {
 	iq := &iteratorQueue[T]{}
 	for _, it := range iteratorArr {
 		next, _ := iter.Pull(it)

@@ -36,16 +36,16 @@ func (tree *BTree[K]) Height() int {
 	return height
 }
 
-func (tree *BTree[K]) Scan(cacheSize int, fn func(k K) bool) {
+func (tree *BTree[K]) Scan(fn func(k K) bool) {
 	if tree.Count() == 0 {
 		return
 	}
 	tree.traverse(tree.meta.Root, fn)
 }
 
-func (tree *BTree[K]) Iterator(cacheSize int) iter.Seq[K] {
+func (tree *BTree[K]) Iterator() iter.Seq[K] {
 	return func(yield func(K) bool) {
-		tree.Scan(cacheSize, func(k K) bool {
+		tree.Scan(func(k K) bool {
 			return yield(k)
 		})
 	}

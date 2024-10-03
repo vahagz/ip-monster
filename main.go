@@ -53,9 +53,6 @@ const ipReaderCacheSize = 1024
 // More degree - more disk space saving but slower insertion.
 const btreeDegree = 10
 
-// count of in-memory nodes while scanning btree
-const treeIteratorCacheSize = 4 * btreeDegree
-
 // minimal amount of data for read while reading sorted arrays
 const arrayIteratorCacheSize = 1024 * 1024
 
@@ -90,10 +87,15 @@ func (k IP) Compare(k2 util.Comparable) int {
 func stageProcessor(
 	pwd string,
 	i int,
-	arrayVFPool *sync.Pool,
 	arrList *[]Array,
 ) func(t *BTree) (*BTree, *sync.WaitGroup) {
 	m := &sync.Mutex{}
+	arrayVFPool := &sync.Pool{New: func() any {
+		vf := file.New()
+		vf.Truncate(uint64(arrayVirtualFileSize))
+		return vf
+	}}
+
 	return func(t *BTree) (*BTree, *sync.WaitGroup) {
 		wg := &sync.WaitGroup{}
 		newTree := btree.New[IP](btreeDegree)
@@ -115,7 +117,7 @@ func stageProcessor(
 			))
 
 			// scanning btree and pushing to array
-			for k := range t.Iterator(treeIteratorCacheSize) {
+			for k := range t.Iterator() {
 				arr.Push(&k)
 			}
 
@@ -137,20 +139,27 @@ func stageProcessor(
 }
 
 func main() {
+	fmt.Println("============ WRITING PHASE ============")
 	start := time.Now()
 	pwd := util.Must(os.Getwd())
-	ipFile := util.Must(os.Open(path.Join(pwd, dataFolder, ipFile)))
-	ipIterators := ip.Iterator(ipFile, ipReaderPageSize, ipReaderCacheSize, ipIteratorCount)
-	writeCount := uint64(0)
-	wg := &sync.WaitGroup{}
-	arrListPerStage := make([][]Array, ipIteratorCount)
-	current := make([]*BTree, ipIteratorCount)
-	arrayVFPool := &sync.Pool{New: func() any {
-		vf := file.New()
-		vf.Truncate(uint64(arrayVirtualFileSize))
-		return vf
-	}}
 
+	// opening file with raw ip addresses
+	ipFile := util.Must(os.Open(path.Join(pwd, dataFolder, ipFile)))
+
+	// breaking file into equal size segments (ipIteratorCount), for parallel reading
+	ipIterators := ip.Iterator(ipFile, ipReaderPageSize, ipReaderCacheSize, ipIteratorCount)
+
+	// slice of on-disk arrays. Each []Array is list of on-disk arrays stored
+	// in files and read from single segment
+	arrListPerStage := make([][]Array, ipIteratorCount)
+
+	// list of trees currently being filled with ips
+	current := make([]*BTree, ipIteratorCount)
+
+	// count of ips read from ip file and written into btrees
+	writeCount := uint64(0)
+
+	// printing progress each second
 	stop := util.SetInterval(func(start, now time.Time) {
 		sec := now.Sub(start).Seconds()
 		fmt.Printf(
@@ -159,40 +168,54 @@ func main() {
 		)
 	}, time.Second)
 
-	for i, iterator := range ipIterators {
+	wg := &sync.WaitGroup{}
+	for i, ipIterator := range ipIterators {
 		wg.Add(1)
-		go func (i int, iterator chan uint32) {
+		// reading each segment in separate goroutine
+		go func (i int, ipIterator iter.Seq[uint32]) {
 			defer wg.Done()
 			var stageWG *sync.WaitGroup
 			stage := 0
-			current[i] = btree.New[IP](btreeDegree)
-			processStage := stageProcessor(pwd, i, arrayVFPool, &arrListPerStage[i])
 
-			for ip := range iterator {
+			// initializing current btree
+			current[i] = btree.New[IP](btreeDegree)
+
+			// prepare helper function which will move filled in-memory btree
+			// into on-disk sorted array
+			processStage := stageProcessor(pwd, i, &arrListPerStage[i])
+
+			for ip := range ipIterator {
 				atomic.AddUint64(&writeCount, 1)
 				current[i].Put(IP(ip))
+
+				// checking if btree is filled enough to store in on-disk array
 				if current[i].Count() == elementsToRead {
 					fmt.Println("STAGE0", i, "|", stage, "|", writeCount)
+					// flushing btree data into on-disk array and creating new one
 					current[i], stageWG = processStage(current[i])
 					stage++
 				}
 			}
 
+			// checking if processStage was executed at least once
 			if stageWG != nil {
+				// wait if previous stage processing didn't finished 
 				stageWG.Wait()
 			}
 
+			// check if segment was completely read and some in-memory data left
 			if current[i].Count() != elementsToRead && current[i].Count() > 0 {
 				fmt.Println("STAGE1", i, "|", stage, "|", writeCount)
+				// process rest data
 				_, wg := processStage(current[i])
 				wg.Wait()
 			}
-		}(i, iterator)
+		}(i, ipIterator)
 	}
 
-	wg.Wait()
+	wg.Wait() // waiting for ip file to be completely read
 	stop()
-	fmt.Println("==========================")
+	fmt.Println("============ READING PHASE ============")
 	fmt.Printf("writeCount %d\n", writeCount)
 
 	// o := func(i, j int, length uint64) Array {
@@ -203,20 +226,15 @@ func main() {
 	// 	))), length)
 	// }
 	// arrListPerStage = [][]Array{
-	// 	{o(0,0,10000000),o(0,1,10000000),o(0,2,10000000),o(0,3,10000000),o(0,4,10000000),o(0,5,10000000),o(0,6,10000000),o(0,7,10000000),o(0,8,10000000),o(0,9,10000000),o(0,10,10000000),o(0,11,10000000),o(0,12,10000000),o(0,13,10000000),o(0,14,513482),},
-	// 	{o(1,0,10000000),o(1,1,10000000),o(1,2,10000000),o(1,3,10000000),o(1,4,10000000),o(1,5,10000000),o(1,6,10000000),o(1,7,10000000),o(1,8,10000000),o(1,9,10000000),o(1,10,10000000),o(1,11,10000000),o(1,12,10000000),o(1,13,10000000),o(1,14,3217395),},
-	// 	{o(2,0,10000000),o(2,1,10000000),o(2,2,10000000),o(2,3,10000000),o(2,4,10000000),o(2,5,10000000),o(2,6,10000000),o(2,7,10000000),o(2,8,10000000),o(2,9,10000000),o(2,10,10000000),o(2,11,10000000),o(2,12,10000000),o(2,13,10000000),o(2,14,8662188),},
-	// 	{o(3,0,10000000),o(3,1,10000000),o(3,2,10000000),o(3,3,10000000),o(3,4,10000000),o(3,5,10000000),o(3,6,10000000),o(3,7,10000000),o(3,8,10000000),o(3,9,10000000),o(3,10,10000000),o(3,11,10000000),o(3,12,10000000),o(3,13,10000000),o(3,14,10000000),o(3,15,4488001),},
-	// 	{o(4,0,10000000),o(4,1,10000000),o(4,2,10000000),o(4,3,10000000),o(4,4,10000000),o(4,5,10000000),o(4,6,10000000),o(4,7,10000000),o(4,8,10000000),o(4,9,10000000),o(4,10,10000000),o(4,11,10000000),o(4,12,10000000),o(4,13,10000000),o(4,14,10000000),o(4,15,8724455),},
-	// 	{o(5,0,10000000),o(5,1,10000000),o(5,2,10000000),o(5,3,10000000),o(5,4,10000000),o(5,5,10000000),o(5,6,10000000),o(5,7,10000000),o(5,8,10000000),o(5,9,10000000),o(5,10,10000000),o(5,11,10000000),o(5,12,10000000),o(5,13,10000000),o(5,14,10000000),o(5,15,8307365),},
-	// 	{o(6,0,10000000),o(6,1,10000000),o(6,2,10000000),o(6,3,10000000),o(6,4,10000000),o(6,5,10000000),o(6,6,10000000),o(6,7,10000000),o(6,8,10000000),o(6,9,10000000),o(6,10,10000000),o(6,11,10000000),o(6,12,10000000),o(6,13,10000000),o(6,14,10000000),o(6,15,1245593),},
-	// 	{o(7,0,10000000),o(7,1,10000000),o(7,2,10000000),o(7,3,10000000),o(7,4,10000000),o(7,5,10000000),o(7,6,10000000),o(7,7,10000000),o(7,8,10000000),o(7,9,10000000),o(7,10,10000000),o(7,11,10000000),o(7,12,10000000),o(7,13,10000000),o(7,14,4674212),},
-	// 	{o(8,0,10000000),o(8,1,10000000),o(8,2,10000000),o(8,3,10000000),o(8,4,10000000),o(8,5,10000000),o(8,6,10000000),o(8,7,10000000),o(8,8,10000000),o(8,9,10000000),o(8,10,10000000),o(8,11,10000000),o(8,12,10000000),o(8,13,9557916),},
-	// 	{o(9,0,10000000),o(9,1,10000000),o(9,2,10000000),o(9,3,10000000),o(9,4,10000000),o(9,5,10000000),o(9,6,10000000),o(9,7,10000000),o(9,8,10000000),o(9,9,10000000),o(9,10,10000000),o(9,11,10000000),o(9,12,10000000),o(9,13,1783410),},
 	// }
 
+	// count of read ip addresses from array files
 	readCount := uint64(0)
+
+	// count of unique ip addresses
 	uniqCount := uint64(0)
+
+	// printing progress each second
 	stop = util.SetInterval(func(start, now time.Time) {
 		sec := now.Sub(start).Seconds()
 		fmt.Printf(
@@ -231,8 +249,11 @@ func main() {
 		}
 	}
 
-	cnt := int(math.Ceil(float64(len(arrListPerStage)) / float64(parallelArrayReaderCount)))
-	for i := range cnt {
+	// this two nested cycles are needed to distribute load on disk.
+	// Actually just limits simultaneously running goroutines to parallelArrayReaderCount
+	// It creates no more than parallelArrayReaderCount goroutines each of which
+	// reads array lists created by index'th segments
+	for i := range int(math.Ceil(float64(len(arrListPerStage)) / float64(parallelArrayReaderCount))) {
 		wg := &sync.WaitGroup{}
 
 		for j := range parallelArrayReaderCount {
@@ -250,10 +271,14 @@ func main() {
 				}
 
 				last := IP(math.MaxUint32)
-				for key := range util.MultIterator(iterators) {
+				// reading values from list of iterators by increasing order
+				for ip := range util.MultiIterator(iterators) {
 					atomic.AddUint64(&readCount, 1)
-					if last != key {
-						last = key
+					// since ips are being read in increasing order
+					// uniqCount must be incremented only when previous ip
+					// is not equal to current ip
+					if last != ip {
+						last = ip
 						atomic.AddUint64(&uniqCount, 1)
 					}
 				}
@@ -264,6 +289,7 @@ func main() {
 	}
 
 	fmt.Println()
-	fmt.Println(readCount, uniqCount)
+	fmt.Println("total read - ", readCount)
+	fmt.Println("uniq count - ", uniqCount)
 	fmt.Println(time.Since(start))
 }
