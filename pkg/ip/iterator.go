@@ -122,7 +122,10 @@ func getOffsets(file *os.File, count int) []int64 {
 			util.PanicIfErr(err)
 		}
 
-		ip := util.Must(bytes.NewBuffer(b).ReadBytes('\n'))
+		ip, err := bytes.NewBuffer(b).ReadBytes('\n')
+		if err != io.EOF {
+			util.PanicIfErr(err)
+		}
 		offsets[i] = offsets[i - 1] + sizePerIterator + int64(len(ip))
 	}
 
