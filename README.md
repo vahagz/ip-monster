@@ -13,7 +13,7 @@ Main goal is to sort IPs to easily calculate unique addresses by sequentially re
 	- If btree is filled, write it's data in ascending order into on-disk array.
 	- repeat until end of segment.
 - When all segments are read and written into sorted arrays it's time to read them and calculate unique count of IPs.
-	- Arrays of single segment must be read at the same time from smallest from all over arrays to biggest. That logic is implemented in `ip.MultiIterator` function.
+	- Arrays of single segment must be read at the same time from smallest from all over arrays to biggest. That logic is implemented in `util.MultiIterator` function.
 	- Count of goroutines for previous step is configured via `parallelArrayReaderCount`. And for each array cache size is configured via `arrayIteratorCacheSize`.
 	- After reading all arrays of each segment we have unique count of IPs.
 
