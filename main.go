@@ -33,11 +33,11 @@ const prefix = "array"
 
 // parallel ip readers count. Each reader processes its own array files.
 // readers are distributed linearly between ipFile.
-const ipIteratorCount = 10
+const ipIteratorCount = 20
 
 // count of goroutines reading final array files.
 // Must be less or equal to ipIteratorCount
-const parallelArrayReaderCount = 10
+const parallelArrayReaderCount = 20
 
 // count of elements to read for each iterator before processing to next stage.
 const elementsToRead = 10_000_000
@@ -50,7 +50,7 @@ const ipReaderCacheSize = 1024
 
 // degree of intermediate btrees.
 // More degree - more memory saving but slower insertion.
-const btreeDegree = 10
+const btreeDegree = 20
 
 // count of ips for single read operation when iterating through array
 const arrayIteratorCacheSize = 1024 * 1024
@@ -214,13 +214,22 @@ func main() {
 
 	// count of read ip addresses from array files
 	readCount := uint64(0)
+	readCountPerSegment := make([]uint64, len(arrListPerStage))
 
 	// count of unique ip addresses
 	uniqCount := uint64(0)
+	uniqCountPerSegment := make([]uint64, len(arrListPerStage))
 
 	// printing progress each second
 	stop = util.SetInterval(func(start, now time.Time) {
 		sec := now.Sub(start).Seconds()
+		readCount := uint64(0)
+		uniqCount := uint64(0)
+		for i := range len(arrListPerStage) {
+			readCount += readCountPerSegment[i]
+			uniqCount += uniqCountPerSegment[i]
+		}
+
 		fmt.Printf(
 			"readCount %d, uniqCount %d, sec %d, eps %d\n",
 			readCount, uniqCount, uint64(sec), readCount / uint64(sec),
@@ -247,7 +256,7 @@ func main() {
 			}
 
 			wg.Add(1)
-			go func (arrList []Array) {
+			go func (arrList []Array, index int) {
 				defer wg.Done()
 				iterators := make([]iter.Seq[IP], len(arrList))
 				for i := range arrList {
@@ -257,16 +266,19 @@ func main() {
 				last := IP(math.MaxUint32)
 				// reading values from list of iterators by increasing order
 				for ip := range util.MultiIterator(iterators) {
-					atomic.AddUint64(&readCount, 1)
+					readCountPerSegment[index]++
 					// since ips are being read in increasing order
 					// uniqCount must be incremented only when previous ip
 					// is not equal to current ip
 					if last != ip {
 						last = ip
-						atomic.AddUint64(&uniqCount, 1)
+						uniqCountPerSegment[index]++
 					}
 				}
-			}(arrListPerStage[index])
+
+				atomic.AddUint64(&readCount, readCountPerSegment[index])
+				atomic.AddUint64(&uniqCount, uniqCountPerSegment[index])
+			}(arrListPerStage[index], index)
 		}
 
 		wg.Wait()
