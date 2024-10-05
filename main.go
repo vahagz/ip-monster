@@ -35,10 +35,6 @@ const prefix = "array"
 // readers are distributed linearly between ipFile.
 const ipIteratorCount = 20
 
-// count of goroutines reading final array files.
-// Must be less or equal to ipIteratorCount
-const parallelArrayReaderCount = 20
-
 // count of elements to read for each iterator before processing to next stage.
 const elementsToRead = 10_000_000
 
@@ -51,6 +47,10 @@ const ipReaderCacheSize = 1024
 // degree of intermediate btrees.
 // More degree - more memory saving but slower insertion.
 const btreeDegree = 20
+
+// count of goroutines reading final array files.
+// Must be less or equal to ipIteratorCount
+const parallelArrayReaderCount = 20
 
 // count of ips for single read operation when iterating through array
 const arrayIteratorCacheSize = 1024 * 1024
