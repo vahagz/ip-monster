@@ -138,7 +138,8 @@ func main() {
 	pwd := util.Must(os.Getwd())
 
 	// opening file with raw ip addresses
-	ipFile := util.Must(os.Open(path.Join(pwd, dataFolder, ipFile)))
+	ipFilePath := path.Join(pwd, dataFolder, ipFile)
+	ipFile := util.Must(os.OpenFile(ipFilePath, os.O_RDONLY, os.ModePerm))
 
 	// breaking file into equal size segments (ipIteratorCount), for parallel reading
 	ipIterators := ip.Iterator(ipFile, ipReaderPageSize, ipReaderCacheSize, ipIteratorCount)
