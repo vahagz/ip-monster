@@ -11,12 +11,6 @@ import (
 	"ip_addr_counter/pkg/util"
 )
 
-type ReadConfigs struct {
-	ArrayListPerStage        [][]*Array
-	ParallelArrayReaderCount int
-	ArrayIteratorCacheSize   int
-}
-
 func Read(cfg *ReadConfigs) uint64 {
 	// count of read ip addresses from array files
 	readCountPerSegment := make([]uint64, len(cfg.ArrayListPerStage))
