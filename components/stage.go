@@ -11,7 +11,7 @@ import (
 	"ip_addr_counter/pkg/util"
 )
 
-// returns helpers function for converting btree into array
+// returns helper function for converting btree into array
 func stageProcessor(
 	dstPath string,
 	prefix string,
