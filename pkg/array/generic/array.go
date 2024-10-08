@@ -2,6 +2,7 @@ package array
 
 import (
 	"context"
+	"io"
 	"iter"
 	"unsafe"
 
@@ -10,55 +11,44 @@ import (
 	"ip_addr_counter/pkg/util"
 )
 
-type Elem interface {  }
-
-type ElemPointer[T any] interface {
-	Elem
-	*T
+type Array[T any] struct {
+	arr *array.Array
 }
 
-type Array[T Elem, PT ElemPointer[T]] interface {
-	Get(index uint64) PT
-	Push(val PT) uint64
-	Len() uint64
-	File() file.Interface
-	Iterator(cacheSize int) iter.Seq[T]
-}
-
-type arrayGeneric[T Elem, PT ElemPointer[T]] struct {
-	arr array.Array
-}
-
-func New[T Elem, PT ElemPointer[T]](file file.Interface, length uint64) Array[T, PT] {
+func New[T any](file file.Interface, length uint64) *Array[T] {
 	var t T
-	return &arrayGeneric[T, PT]{
+	return &Array[T]{
 		arr: array.New(file, uint64(unsafe.Sizeof(t)), length),
 	}
 }
 
-func (a *arrayGeneric[T, PT]) Get(index uint64) PT {
+func (a *Array[T]) Get(index uint64) *T {
 	return util.BytesTo[*T](a.arr.Get(index))
 }
 
-func (a *arrayGeneric[T, PT]) Set(index uint64, val PT) {
+func (a *Array[T]) Set(index uint64, val *T) {
 	*a.Get(index) = *val
 }
 
-func (a *arrayGeneric[T, PT]) Push(val PT) uint64 {
+func (a *Array[T]) Push(val *T) uint64 {
 	a.arr.Grow(a.arr.Len() + 1)
 	a.Set(a.arr.Len() - 1, val)
 	return a.arr.Len() - 1
 }
 
-func (a *arrayGeneric[T, PT]) Len() uint64 {
+func (a *Array[T]) Len() uint64 {
 	return a.arr.Len()
 }
 
-func (a *arrayGeneric[T, PT]) File() file.Interface {
+func (a *Array[T]) File() file.Interface {
 	return a.arr.File()
 }
 
-func (a *arrayGeneric[T, PT]) Iterator(cacheSize int) iter.Seq[T] {
+func (a *Array[T]) FileReader() io.Reader {
+	return a.arr.FileReader()
+}
+
+func (a *Array[T]) Iterator(cacheSize int) iter.Seq[T] {
 	ctx, cancel := context.WithCancel(context.Background())
 	ch := make(chan T, cacheSize)
 	go func() {

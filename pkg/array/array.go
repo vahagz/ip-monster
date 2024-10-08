@@ -9,7 +9,7 @@ import (
 	"ip_addr_counter/pkg/file"
 )
 
-type array struct {
+type Array struct {
 	file      file.Interface
 	fileSize  uint64
 	elemSize  uint64
@@ -17,17 +17,8 @@ type array struct {
 	offset    uint64
 }
 
-type Array interface {
-	Get(index uint64) []byte
-	Push(val []byte) uint64
-	Len() uint64
-	Grow(size uint64)
-	File() file.Interface
-	Iterator(cacheSize int) iter.Seq[[]byte]
-}
-
-func New(file file.Interface, elemSize, length uint64) Array {
-	return &array{
+func New(file file.Interface, elemSize, length uint64) *Array {
+	return &Array{
 		file:     file,
 		fileSize: file.Size(),
 		elemSize: elemSize,
@@ -36,33 +27,33 @@ func New(file file.Interface, elemSize, length uint64) Array {
 	}
 }
 
-func (a *array) Get(index uint64) []byte {
+func (a *Array) Get(index uint64) []byte {
 	a.checkBounds(index)
 	index += a.offset
 	return a.file.Slice(a.indexToOffset(index), uint64(a.elemSize))
 }
 
-func (a *array) Set(index uint64, val []byte) {
+func (a *Array) Set(index uint64, val []byte) {
 	a.checkBounds(index)
 	index += a.offset
 	copy(a.file.Slice(a.indexToOffset(index), uint64(a.elemSize)), val)
 }
 
-func (a *array) Push(val []byte) uint64 {
+func (a *Array) Push(val []byte) uint64 {
 	a.Grow(a.length + 1)
 	a.Set(a.length - 1, val)
 	return a.length - 1
 }
 
-func (a *array) Len() uint64 {
+func (a *Array) Len() uint64 {
 	return a.length
 }
 
-func (a *array) Cap() uint64 {
+func (a *Array) Cap() uint64 {
 	return a.fileSize / (a.elemSize - a.offset)
 }
 
-func (a *array) Truncate(size uint64) {
+func (a *Array) Truncate(size uint64) {
 	a.fileSize = uint64(size) * uint64(a.elemSize)
 	err := a.file.Truncate(a.fileSize)
 	if err != nil {
@@ -75,7 +66,7 @@ func (a *array) Truncate(size uint64) {
 	}
 }
 
-func (a *array) Grow(size uint64) {
+func (a *Array) Grow(size uint64) {
 	if size <= a.length {
 		return
 	}
@@ -86,16 +77,20 @@ func (a *array) Grow(size uint64) {
 	a.length = size
 }
 
-func (a *array) File() file.Interface {
+func (a *Array) File() file.Interface {
 	return a.file
 }
 
-func (a *array) Iterator(cacheSize int) iter.Seq[[]byte] {
+func (a *Array) FileReader() io.Reader {
+	return a.file.LimitReader(int64(a.elemSize*a.length))
+}
+
+func (a *Array) Iterator(cacheSize int) iter.Seq[[]byte] {
 	return func(yield func([]byte) bool) {
 		elemSize := int(a.elemSize)
 		elem := make([]byte, elemSize)
 		bufferSize := elemSize * cacheSize
-		file := bufio.NewReaderSize(a.file.Reader(), bufferSize)
+		file := bufio.NewReaderSize(a.FileReader(), bufferSize)
 
 		for range a.length {
 			n, err := file.Read(elem)
@@ -108,12 +103,12 @@ func (a *array) Iterator(cacheSize int) iter.Seq[[]byte] {
 	}
 }
 
-func (a *array) checkBounds(index uint64) {
+func (a *Array) checkBounds(index uint64) {
 	if index >= a.length {
 		panic(fmt.Errorf("out of bounds: %d", index))
 	}
 }
 
-func (a *array) indexToOffset(index uint64) uint64 {
+func (a *Array) indexToOffset(index uint64) uint64 {
 	return index * a.elemSize
 }

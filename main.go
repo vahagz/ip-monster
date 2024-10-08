@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"iter"
 	"math"
@@ -64,7 +63,7 @@ const arrayVirtualFileSize = elementsToRead * ipSize
 
 type BTree = btree.BTree[IP]
 
-type Array = array.Array[IP, *IP]
+type Array = array.Array[IP]
 
 // btree key (aka ip). Implements btree.Key interface
 type IP uint32
@@ -83,21 +82,23 @@ func (k IP) Compare(k2 util.Comparable) int {
 func stageProcessor(
 	pwd string,
 	i int,
-	arrList *[]Array,
-) func(t *BTree) (*sync.WaitGroup) {
+	arrList *[]*Array,
+) func(t *BTree) *sync.WaitGroup {
 	m := &sync.Mutex{}
 	arrayVFPool := &sync.Pool{New: func() any {
-		vf := file.New()
+		vf := file.Virtual()
 		vf.Truncate(uint64(arrayVirtualFileSize))
 		return vf
 	}}
 
-	return func(t *BTree) (*sync.WaitGroup) {
+	return func(t *BTree) *sync.WaitGroup {
+		// wait if previous call didn't finished yet
+		m.Lock()
+
 		wg := &sync.WaitGroup{}
 		wg.Add(1)
 		go func () {
 			defer wg.Done()
-			m.Lock()
 			defer m.Unlock()
 
 			// initializing in-memory array to copy btree keys in increasing order
@@ -116,14 +117,14 @@ func stageProcessor(
 			}
 
 			// copying array in-memory data to file
-			f.ReadFrom(bytes.NewBuffer(arr.File().Slice(0, uint64(arr.Len()) * uint64(ipSize))))
+			f.ReadFrom(arr.FileReader())
 
 			// returning array virtual file to pool for reuse
 			arrayVFPool.Put(arr.File().(*file.VirtualFile))
 
 			util.PanicIfErr(f.Sync())
 			*arrList = append(*arrList, array.New[IP](
-				file.NewFromOSFile(f),
+				file.OS(f),
 				t.Count(),
 			))
 		}()
@@ -146,7 +147,7 @@ func main() {
 
 	// slice of on-disk arrays. Each []Array is list of on-disk arrays stored
 	// in files and read from single segment
-	arrListPerStage := make([][]Array, ipIteratorCount)
+	arrListPerStage := make([][]*Array, ipIteratorCount)
 
 	// list of trees currently being filled with ips
 	current := make([]*BTree, ipIteratorCount)
@@ -239,8 +240,9 @@ func main() {
 
 	for i, arrList := range arrListPerStage {
 		for j, a := range arrList {
-			fmt.Println(i, j, a.Len())
+			fmt.Printf("(%v,%v,%v),", i, j, a.Len())
 		}
+		fmt.Println()
 	}
 
 	// this two nested cycles are needed to distribute load on disk.
@@ -256,15 +258,16 @@ func main() {
 				break
 			}
 
-			wg.Add(1)
-			go func (arrList []Array, index int) {
-				defer wg.Done()
-				iterators := make([]iter.Seq[IP], len(arrList))
-				for i := range arrList {
-					iterators[i] = arrList[i].Iterator(arrayIteratorCacheSize)
-				}
+			last := IP(math.MaxUint32)
+			arrList := arrListPerStage[index]
+			iterators := make([]iter.Seq[IP], len(arrList))
+			for i := range arrList {
+				iterators[i] = arrList[i].Iterator(arrayIteratorCacheSize)
+			}
 
-				last := IP(math.MaxUint32)
+			wg.Add(1)
+			go func () {
+				defer wg.Done()
 				// reading values from list of iterators by increasing order
 				for ip := range util.MultiIterator(iterators) {
 					readCountPerSegment[index]++
@@ -279,7 +282,7 @@ func main() {
 
 				atomic.AddUint64(&readCount, readCountPerSegment[index])
 				atomic.AddUint64(&uniqCount, uniqCountPerSegment[index])
-			}(arrListPerStage[index], index)
+			}()
 		}
 
 		wg.Wait()

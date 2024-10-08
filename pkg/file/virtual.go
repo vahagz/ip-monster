@@ -6,7 +6,7 @@ import (
 	"io"
 )
 
-func New() *VirtualFile {
+func Virtual() *VirtualFile {
 	return &VirtualFile{}
 }
 
@@ -34,6 +34,6 @@ func (vf *VirtualFile) Slice(from, n uint64) []byte {
 	return vf.data[from:from+n]
 }
 
-func (vf *VirtualFile) Reader() io.Reader {
-	return bytes.NewReader(vf.data)
+func (vf *VirtualFile) LimitReader(n int64) io.Reader {
+	return bytes.NewReader(vf.data[:n])
 }

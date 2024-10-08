@@ -9,7 +9,7 @@ type OSFile struct {
 	file *os.File
 }
 
-func NewFromOSFile(f *os.File) Interface {
+func OS(f *os.File) *OSFile {
 	return &OSFile{f}
 }
 
@@ -31,7 +31,7 @@ func (of *OSFile) Size() uint64 {
 	return uint64(stat.Size())
 }
 
-func (of *OSFile) Reader() io.Reader {
+func (of *OSFile) LimitReader(n int64) io.Reader {
 	of.file.Seek(0, io.SeekStart)
-	return of.file
+	return io.LimitReader(of.file, int64(n))
 }
