@@ -1,6 +1,7 @@
 package file
 
 import (
+	"io"
 	"os"
 	"sync"
 )
@@ -35,8 +36,9 @@ func (of *OSFile) Size() uint64 {
 	return uint64(stat.Size())
 }
 
-func (of *OSFile) Return(buf []byte) {
-	of.pools[uint64(len(buf))].Put(buf)
+func (of *OSFile) Reader() io.Reader {
+	of.file.Seek(0, io.SeekStart)
+	return of.file
 }
 
 func (of *OSFile) getBuf(n uint64) []byte {

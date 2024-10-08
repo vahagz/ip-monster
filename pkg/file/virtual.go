@@ -1,7 +1,9 @@
 package file
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 )
 
 func New() *VirtualFile {
@@ -32,4 +34,6 @@ func (vf *VirtualFile) Slice(from, n uint64) []byte {
 	return vf.data[from:from+n]
 }
 
-func (vf *VirtualFile) Return(buf []byte) {}
+func (vf *VirtualFile) Reader() io.Reader {
+	return bytes.NewReader(vf.data)
+}

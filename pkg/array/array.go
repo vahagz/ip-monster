@@ -1,10 +1,11 @@
 package array
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"iter"
-	"math"
 
 	"ip_addr_counter/pkg/file"
 )
@@ -144,26 +145,17 @@ func (a *array) File() file.Interface {
 
 func (a *array) Iterator(cacheSize int) iter.Seq[[]byte] {
 	return func(yield func([]byte) bool) {
-		pageCount := uint64(math.Ceil(float64(a.length) / float64(cacheSize)))
+		elemSize := int(a.elemSize)
+		elem := make([]byte, elemSize)
+		bufferSize := elemSize * cacheSize
+		file := bufio.NewReaderSize(a.file.Reader(), bufferSize)
 
-		L: for pageIndex := range pageCount {
-			elemsCount := uint64(cacheSize)
-			if pageIndex == pageCount - 1 {
-				elemsCount = a.length % uint64(cacheSize)
-				if elemsCount == 0 {
-					elemsCount = uint64(cacheSize)
-				}
-			}
-
-			pageSize := a.elemSize * uint64(cacheSize)
-			page := a.file.Slice(pageIndex * pageSize, pageSize)
-
-			from := uint64(0)
-			for range elemsCount {
-				if !yield(page[from:from + a.elemSize]) {
-					break L
-				}
-				from += a.elemSize
+		for range a.length {
+			n, err := file.Read(elem)
+			if n != elemSize || (err != nil && err != io.EOF) {
+				panic(err)
+			} else if !yield(elem) {
+				break
 			}
 		}
 	}

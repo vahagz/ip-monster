@@ -30,7 +30,6 @@ type Array[T Elem, PT ElemPointer[T]] interface {
 	Slice(from, to uint64) Array[T, PT]
 	File() file.Interface
 	Iterator(cacheSize int) iter.Seq[T]
-	Return(val PT)
 }
 
 type arrayGeneric[T Elem, PT ElemPointer[T]] struct {
@@ -124,8 +123,4 @@ func (a *arrayGeneric[T, PT]) Iterator(cacheSize int) iter.Seq[T] {
 			}
 		}
 	}
-}
-
-func (a *arrayGeneric[T, PT]) Return(val PT) {
-	a.arr.File().Return(util.ToBytes(val))
 }
