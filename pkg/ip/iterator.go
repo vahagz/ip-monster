@@ -2,6 +2,7 @@ package ip
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"io"
 	"iter"
@@ -20,19 +21,17 @@ func Iterator(file *os.File, pageSize, cacheSize, count int) []iter.Seq[uint32] 
 	wg := &sync.WaitGroup{}
 	iterArr := make([]iter.Seq[uint32], count)
 	chArr := make([]chan uint32, count)
-	chmArr := make([]*util.ChanManager[uint32], count)
 	offsets := getOffsets(file, count)
 	fileSize := util.Must(file.Stat()).Size()
+	ctx, cancel := context.WithCancel(context.Background())
 
 	for i := range count {
 		ch := make(chan uint32, cacheSize)
-		chm := util.NewChanManager(ch)
 		chArr[i] = ch
-		chmArr[i] = chm
 		iterArr[i] = func(yield func(uint32) bool) {
 			for ip := range ch {
 				if !yield(ip) {
-					chm.Close()
+					cancel()
 					break
 				}
 			}
@@ -61,7 +60,7 @@ func Iterator(file *os.File, pageSize, cacheSize, count int) []iter.Seq[uint32] 
 					from += int64(n)
 					if n == 0 && err == io.EOF {
 						if len(ip) > 0 {
-							send(chmArr, ipParser, ip)
+							send(ctx, chArr, ipParser, ip)
 						}
 						break
 					} else if err != io.EOF && err != nil {
@@ -71,8 +70,8 @@ func Iterator(file *os.File, pageSize, cacheSize, count int) []iter.Seq[uint32] 
 					panic(err)
 				} else {
 					read += int64(len(ip))
-					send(chmArr, ipParser, ip)
-					if read >= readCount {
+					sent := send(ctx, chArr, ipParser, ip)
+					if read >= readCount || !sent {
 						break
 					}
 				}
@@ -80,10 +79,11 @@ func Iterator(file *os.File, pageSize, cacheSize, count int) []iter.Seq[uint32] 
 		}()
 	}
 
-	go func () {
+	go func() {
 		wg.Wait()
+		cancel()
 		for i := range count {
-			chmArr[i].Close()
+			close(chArr[i])
 		}
 	}()
 
@@ -100,7 +100,7 @@ func readPage(file *os.File, pageSize int, buf *bytes.Buffer, halfReadIp []byte,
 	return n, err
 }
 
-func send(chmArr []*util.ChanManager[uint32], parser *parser, ip []byte) {
+func send(ctx context.Context, chArr []chan uint32, parser *parser, ip []byte) bool {
 	if ip[len(ip)-1] == '\n' {
 		ip = ip[:len(ip) - 1]
 	}
@@ -108,7 +108,12 @@ func send(chmArr []*util.ChanManager[uint32], parser *parser, ip []byte) {
 		ip = ip[:len(ip) - 1]
 	}
 	ipParsed := binary.BigEndian.Uint32(util.Must(parser.Parse(ip)))
-	chmArr[getIndex(ipParsed, len(chmArr))].Send(ipParsed)
+	select {
+	case <-ctx.Done():
+		return false
+	case chArr[getIndex(ipParsed, len(chArr))] <- ipParsed:
+		return true
+	}
 }
 
 func getOffsets(file *os.File, count int) []int64 {

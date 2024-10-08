@@ -11,6 +11,7 @@ type Comparable interface {
 
 type queueItem[T Comparable] struct {
 	next func() (T, bool)
+	stop func()
 	last T
 }
 
@@ -42,10 +43,10 @@ func (iq *iteratorQueue[T]) Pop() any {
 func MultiIterator[T Comparable](iteratorArr []iter.Seq[T]) iter.Seq[T] {
 	iq := &iteratorQueue[T]{}
 	for _, it := range iteratorArr {
-		next, _ := iter.Pull(it)
+		next, stop := iter.Pull(it)
 		last, ok := next()
 		if ok {
-			*iq = append(*iq, queueItem[T]{next: next, last: last})
+			*iq = append(*iq, queueItem[T]{next: next, stop: stop, last: last})
 		}
 	}
 
@@ -62,6 +63,7 @@ func MultiIterator[T Comparable](iteratorArr []iter.Seq[T]) iter.Seq[T] {
 			}
 
 			if !yield(last) {
+				itm.stop()
 				break
 			}
 		}

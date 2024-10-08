@@ -287,6 +287,6 @@ func main() {
 
 	fmt.Println()
 	fmt.Println("readCount -", readCount)
-	fmt.Println("uniq count -", uniqCount)
+	fmt.Println("uniqCount -", uniqCount)
 	fmt.Println("duration -", time.Since(start))
 }

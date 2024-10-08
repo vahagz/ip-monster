@@ -1,6 +1,7 @@
 package array
 
 import (
+	"context"
 	"iter"
 	"unsafe"
 
@@ -101,9 +102,24 @@ func (a *arrayGeneric[T, PT]) File() file.Interface {
 
 
 func (a *arrayGeneric[T, PT]) Iterator(cacheSize int) iter.Seq[T] {
+	ctx, cancel := context.WithCancel(context.Background())
+	ch := make(chan T, cacheSize)
+	go func() {
+		L: for itm := range a.arr.Iterator(cacheSize) {
+			select {
+			case <-ctx.Done():
+				break L
+			case ch <- *util.BytesTo[*T](itm):
+				break
+			}
+		}
+		close(ch)
+	}()
+
 	return func(yield func(T) bool) {
-		for itm := range a.arr.Iterator(cacheSize) {
-			if !yield(*util.BytesTo[*T](itm)) {
+		for itm := range ch {
+			if !yield(itm) {
+				cancel()
 				break
 			}
 		}
