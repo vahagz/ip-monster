@@ -3,19 +3,14 @@ package file
 import (
 	"io"
 	"os"
-	"sync"
 )
 
 type OSFile struct {
-	pools     map[uint64]*sync.Pool
-	file      *os.File
+	file *os.File
 }
 
 func NewFromOSFile(f *os.File) Interface {
-	return &OSFile{
-		pools: map[uint64]*sync.Pool{},
-		file:  f,
-	}
+	return &OSFile{f}
 }
 
 func (of *OSFile) Truncate(size uint64) error {
@@ -23,7 +18,7 @@ func (of *OSFile) Truncate(size uint64) error {
 }
 
 func (of *OSFile) Slice(from, n uint64) []byte {
-	buf := of.getBuf(n)
+	buf := make([]byte, n)
 	of.file.ReadAt(buf, int64(from))
 	return buf
 }
@@ -39,18 +34,4 @@ func (of *OSFile) Size() uint64 {
 func (of *OSFile) Reader() io.Reader {
 	of.file.Seek(0, io.SeekStart)
 	return of.file
-}
-
-func (of *OSFile) getBuf(n uint64) []byte {
-	p, ok := of.pools[n]
-	if !ok {
-		p = &sync.Pool{
-			New: func() any {
-				return make([]byte, n)
-			},
-		}
-		of.pools[n] = p
-	}
-
-	return p.Get().([]byte)
 }

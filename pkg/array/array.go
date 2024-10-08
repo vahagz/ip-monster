@@ -2,7 +2,6 @@ package array
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
 	"io"
 	"iter"
@@ -20,18 +19,8 @@ type array struct {
 
 type Array interface {
 	Get(index uint64) []byte
-	GetCopy(index uint64) []byte
-	Last() []byte
-	Set(index uint64, val []byte)
 	Push(val []byte) uint64
-	Popn()
-	Pop() []byte
-	PopCopy() []byte
-	Swap(i, j uint64)
 	Len() uint64
-	Cap() uint64
-	Slice(from, to uint64) Array
-	Truncate(size uint64)
 	Grow(size uint64)
 	File() file.Interface
 	Iterator(cacheSize int) iter.Seq[[]byte]
@@ -53,14 +42,6 @@ func (a *array) Get(index uint64) []byte {
 	return a.file.Slice(a.indexToOffset(index), uint64(a.elemSize))
 }
 
-func (a *array) GetCopy(index uint64) []byte {
-	return bytes.Clone(a.Get(index))
-}
-
-func (a *array) Last() []byte {
-	return a.Get(a.length - 1)
-}
-
 func (a *array) Set(index uint64, val []byte) {
 	a.checkBounds(index)
 	index += a.offset
@@ -73,46 +54,12 @@ func (a *array) Push(val []byte) uint64 {
 	return a.length - 1
 }
 
-func (a *array) Popn() {
-	*a = *a.Slice(0, a.length - 1).(*array)
-}
-
-func (a *array) Pop() []byte {
-	val := a.Get(a.length - 1)
-	*a = *a.Slice(0, a.length - 1).(*array)
-	return val
-}
-
-func (a *array) PopCopy() []byte {
-	return bytes.Clone(a.Pop())
-}
-
-func (a *array) Swap(i, j uint64) {
-	itm1, itm2 := a.GetCopy(i), a.GetCopy(j)
-	a.Set(i, itm2)
-	a.Set(j, itm1)
-}
-
 func (a *array) Len() uint64 {
 	return a.length
 }
 
 func (a *array) Cap() uint64 {
 	return a.fileSize / (a.elemSize - a.offset)
-}
-
-func (a *array) Slice(from, to uint64) Array {
-	if from < 0 || from > to || to < 0 || to > a.Cap() {
-		panic(fmt.Errorf("out of bounds: [%d:%d], len:%d, cap:%d", from, to, a.length, a.Cap()))
-	}
-
-	return &array{
-		file:     a.file,
-		fileSize: a.fileSize,
-		elemSize: a.elemSize,
-		length:   to - from,
-		offset:   a.offset + from,
-	}
 }
 
 func (a *array) Truncate(size uint64) {
