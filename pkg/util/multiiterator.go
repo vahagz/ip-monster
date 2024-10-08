@@ -63,9 +63,12 @@ func MultiIterator[T Comparable](iteratorArr []iter.Seq[T]) iter.Seq[T] {
 			}
 
 			if !yield(last) {
-				itm.stop()
 				break
 			}
+		}
+
+		for _, qi := range *iq {
+			qi.stop()
 		}
 	}
 }

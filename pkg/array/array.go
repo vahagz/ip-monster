@@ -146,7 +146,7 @@ func (a *array) Iterator(cacheSize int) iter.Seq[[]byte] {
 	return func(yield func([]byte) bool) {
 		pageCount := uint64(math.Ceil(float64(a.length) / float64(cacheSize)))
 
-		for pageIndex := range pageCount {
+		L: for pageIndex := range pageCount {
 			elemsCount := uint64(cacheSize)
 			if pageIndex == pageCount - 1 {
 				elemsCount = a.length % uint64(cacheSize)
@@ -161,7 +161,7 @@ func (a *array) Iterator(cacheSize int) iter.Seq[[]byte] {
 			from := uint64(0)
 			for range elemsCount {
 				if !yield(page[from:from + a.elemSize]) {
-					break
+					break L
 				}
 				from += a.elemSize
 			}
